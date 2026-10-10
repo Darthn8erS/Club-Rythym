@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Club Rhythm - Guitar Hero Edition</title>
+    <title>Club Rhythm - Classic Edition</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #0a0a0a; color: #fff;
@@ -46,8 +46,8 @@
 <body>
 
     <div id="ui-layer">
-        <h1>NEON GIG</h1>
-        <p style="color: #ccc; margin-bottom: 15px;">Guitar Hero Edition</p>
+        <h1>CLUB RHYTHM</h1>
+        <p style="color: #ccc; margin-bottom: 15px;">Rock Star Edition</p>
         
         <input type="text" id="player-name" placeholder="Enter DJ Name" value="DarthN8erS">
 
@@ -108,11 +108,10 @@
         canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
         canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
 
-        let audioContext, audioBuffer, audioSource;
-        let isPlaying = false, score = 0, combo = 0, misses = 0, frameCount = 0;
+        let audioContext, audioBuffer, audioSource, analyser;
+        let isPlaying = false, score = 0, combo = 0, misses = 0, lastSpawnTime = 0;
         const MAX_MISSES = 20; 
         
-        // Lane X coordinates across the screen width
         let laneWidth = 70;
         let startX = (canvas.width - (laneWidth * 4)) / 2;
         let lanes = [
@@ -122,6 +121,7 @@
             startX + laneWidth * 3
         ];
         
+        let notes = [];
         let currentSongName = "Unknown Track";
         let feedbackText = "", feedbackColor = "#fff", feedbackTimer = 0;
         const laneColors = ['#ff0055', '#00ffcc', '#ffee00', '#0077ff'];
@@ -151,6 +151,9 @@
             try {
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
                 audioContext = new AudioCtx();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+
                 const arrayBuffer = await file.arrayBuffer();
 
                 audioContext.decodeAudioData(arrayBuffer, 
@@ -179,12 +182,13 @@
             uiLayer.classList.add('hidden');
             hud.classList.remove('hidden');
 
-            score = 0; combo = 0; misses = 0; notes = []; frameCount = 0;
+            score = 0; combo = 0; misses = 0; notes = []; lastSpawnTime = 0;
             updateHUD();
 
             audioSource = audioContext.createBufferSource();
             audioSource.buffer = audioBuffer;
-            audioSource.connect(audioContext.destination);
+            audioSource.connect(analyser);
+            analyser.connect(audioContext.destination);
             audioSource.start(0);
             
             isPlaying = true;
@@ -192,22 +196,31 @@
             requestAnimationFrame(gameLoop);
         }
 
-        let notes = [];
         function spawnNote() {
             let laneIndex = Math.floor(Math.random() * 4);
             notes.push({ lane: laneIndex, y: -40, active: true });
         }
 
-        function gameLoop() {
+        function gameLoop(timestamp) {
             if (!isPlaying) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            frameCount++;
             
-            // Draw Fretboard background container
+            // Analyze audio frequencies for dynamic rhythm synchronization
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            let avgEnergy = dataArray.reduce((a, b) => a + b) / dataArray.length;
+
+            // Spawn notes based on audio peaks + smooth time fallback
+            if ((avgEnergy > 110 && timestamp - lastSpawnTime > 300) || timestamp - lastSpawnTime > 700) {
+                spawnNote();
+                lastSpawnTime = timestamp;
+            }
+
+            // Fretboard background
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(startX, 0, laneWidth * 4, canvas.height);
 
-            // Draw vertical lane dividers
+            // Vertical lanes
             ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
             for (let i = 0; i <= 4; i++) {
                 ctx.beginPath();
@@ -216,7 +229,7 @@
                 ctx.stroke();
             }
 
-            // Target Hit Line at bottom
+            // Target Hit Line
             const hitY = canvas.height - 140;
             ctx.strokeStyle = '#ff3300'; ctx.lineWidth = 4;
             ctx.beginPath();
@@ -224,7 +237,7 @@
             ctx.lineTo(startX + (laneWidth * 4), hitY);
             ctx.stroke();
 
-            // Permanent rectangular target buttons at the bottom of each lane
+            // Permanent target buttons at bottom of lanes
             lanes.forEach((x, idx) => {
                 ctx.fillStyle = laneColors[idx];
                 ctx.fillRect(x + 5, hitY - 15, laneWidth - 10, 30);
@@ -232,14 +245,10 @@
                 ctx.strokeRect(x + 5, hitY - 15, laneWidth - 10, 30);
             });
 
-            if (frameCount % 45 === 0) {
-                spawnNote();
-            }
-
-            // Draw falling rectangular Guitar Hero notes
+            // Falling rectangular notes
             for (let i = notes.length - 1; i >= 0; i--) {
                 let note = notes[i];
-                note.y += 4.5; // Smooth fall speed
+                note.y += 4.5; 
 
                 let noteX = lanes[note.lane] + 5;
                 let noteW = laneWidth - 10;
@@ -250,7 +259,6 @@
                 ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                 ctx.strokeRect(noteX, note.y, noteW, noteH);
 
-                // Check if note passes bottom without being hit (Miss)
                 if (note.y > hitY + 30) {
                     if (note.active) { 
                         misses++; 
@@ -265,7 +273,7 @@
                 }
             }
 
-            // Pop-up Feedback Text (PERFECT, GOOD, MISS)
+            // Feedback Text
             if (feedbackTimer > 0) {
                 feedbackTimer--;
                 ctx.font = "bold 28px 'Courier New'";
