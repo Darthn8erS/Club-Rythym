@@ -78,7 +78,6 @@
     <canvas id="game-canvas"></canvas>
 
     <script>
-        // REPLACE WITH YOUR ACTUAL FIREBASE CONFIG FROM CONSOLE
         const firebaseConfig = {
             apiKey: "YOUR_API_KEY",
             authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -110,12 +109,11 @@
         canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
 
         let audioContext, audioBuffer, audioSource, analyser;
-        let isPlaying = false, score = 0, combo = 0, misses = 0, lastSpawnTime = 0;
+        let isPlaying = false, score = 0, combo = 0, misses = 0, frameCount = 0;
         const MAX_MISSES = 20; 
         let notes = [], lanes = [canvas.width*0.2, canvas.width*0.4, canvas.width*0.6, canvas.width*0.8];
         let currentSongName = "Unknown Track";
 
-        // Fetch Leaderboard on Load
         function fetchLeaderboard() {
             db.collection("scores").orderBy("score", "desc").limit(5).get().then((querySnapshot) => {
                 let html = "";
@@ -172,7 +170,7 @@
             uiLayer.classList.add('hidden');
             hud.classList.remove('hidden');
 
-            score = 0; combo = 0; misses = 0; notes = []; lastSpawnTime = 0;
+            score = 0; combo = 0; misses = 0; notes = []; frameCount = 0;
             updateHUD();
 
             audioSource = audioContext.createBufferSource();
@@ -190,9 +188,10 @@
             notes.push({ x: lanes[Math.floor(Math.random() * 4)], y: -50, radius: 30, active: true });
         }
 
-        function gameLoop(timestamp) {
+        function gameLoop() {
             if (!isPlaying) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frameCount++;
             
             ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
             lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
@@ -201,9 +200,9 @@
             analyser.getByteFrequencyData(dataArray);
             let avgEnergy = dataArray.reduce((a, b) => a + b) / dataArray.length;
             
-            if (avgEnergy > 150 && Math.random() > 0.5 && timestamp - lastSpawnTime > 350) {
+            // Hybrid logic: Spawns on audio cues OR ensures a smooth rhythmic flow every 50 frames
+            if ((avgEnergy > 80 && Math.random() > 0.4) || frameCount % 50 === 0) {
                 spawnNote();
-                lastSpawnTime = timestamp;
             }
 
             const hitY = canvas.height - 120;
@@ -258,7 +257,6 @@
 
         function finishGame() {
             let playerName = document.getElementById('player-name').value || "Anonymous";
-            // Submit score to Firebase Firestore
             db.collection("scores").add({
                 player: playerName,
                 score: score,
