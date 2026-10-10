@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Club Rhythm - Classic Edition</title>
+    <title>Neon Gig - Global Tour</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #0a0a0a; color: #fff;
@@ -46,8 +46,8 @@
 <body>
 
     <div id="ui-layer">
-        <h1>CLUB RHYTHM</h1>
-        <p style="color: #ccc; margin-bottom: 15px;">Classic Rock Edition</p>
+        <h1>NEON GIG</h1>
+        <p style="color: #ccc; margin-bottom: 15px;">Global Tour Edition</p>
         
         <input type="text" id="player-name" placeholder="Enter DJ Name" value="DarthN8erS">
 
@@ -181,7 +181,7 @@
         }
 
         function spawnNote() {
-            notes.push({ x: lanes[Math.floor(Math.random() * 4)], y: -50, radius: 30, active: true });
+            notes.push({ x: lanes[Math.floor(Math.random() * 4)], y: -50, radius: 25, active: true });
         }
 
         function gameLoop() {
@@ -189,7 +189,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             frameCount++;
             
-            ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 3;
             lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
             
             if (frameCount % 45 === 0) {
@@ -197,8 +197,8 @@
             }
 
             const hitY = canvas.height - 120;
-            ctx.fillStyle = 'rgba(255, 51, 0, 0.3)';
-            ctx.fillRect(0, hitY - 40, canvas.width, 80);
+            ctx.fillStyle = 'rgba(255, 51, 0, 0.2)';
+            ctx.fillRect(lanes[0] - 30, hitY - 30, lanes[3] - lanes[0] + 60, 60);
 
             for (let i = notes.length - 1; i >= 0; i--) {
                 let note = notes[i];
@@ -207,7 +207,7 @@
                 ctx.fillStyle = '#ffaa00';
                 ctx.beginPath(); ctx.arc(note.x, note.y, note.radius, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = '#ff3300';
-                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius * 0.6, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius * 0.5, 0, Math.PI * 2); ctx.fill();
 
                 if (note.y > canvas.height) {
                     if (note.active) { 
@@ -229,7 +229,7 @@
             
             notes.forEach(note => {
                 if (!note.active) return;
-                if (Math.abs(note.y - hitY) < 80 && Math.abs(note.x - touch.clientX) < 80) {
+                if (Math.abs(note.y - hitY) < 50 && Math.abs(note.x - touch.clientX) < 50) {
                     note.active = false;
                     score += 100 + (combo * 10);
                     combo++; 
