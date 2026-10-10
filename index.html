@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Gig - Rhythm Tour</title>
+    <title>Neon Gig - Global Tour</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #0a0a0a; color: #fff;
@@ -34,13 +35,20 @@
             pointer-events: none; text-shadow: 2px 2px 4px #000; font-size: 1.2rem;
         }
         #start-btn { background: #00ff00; color: #000; border-color: #00ff00; box-shadow: 0 0 15px #00ff00; }
+        #leaderboard {
+            margin-top: 15px; background: rgba(0,0,0,0.6); border: 1px solid #ff3300;
+            padding: 10px; width: 80%; max-width: 300px; max-height: 120px; overflow-y: auto; font-size: 0.85rem;
+        }
     </style>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 
     <div id="ui-layer">
         <h1>NEON GIG</h1>
-        <p style="color: #ccc; margin-bottom: 20px;">DJ Player</p>
+        <p style="color: #ccc; margin-bottom: 15px;">DJ Player</p>
         
         <input type="text" id="player-name" placeholder="Enter DJ Name" value="DarthN8erS">
 
@@ -55,6 +63,11 @@
             <h2 id="loading-text">Decoding Audio...</h2>
             <button id="start-btn" class="hidden">TAP TO START GIG</button>
         </div>
+
+        <div id="leaderboard">
+            <div style="font-weight: bold; border-bottom: 1px solid #ff3300; margin-bottom: 5px;">GLOBAL LEADERBOARD</div>
+            <div id="leaderboard-list">Loading scores...</div>
+        </div>
     </div>
 
     <div id="hud" class="hidden">
@@ -66,6 +79,20 @@
     <canvas id="game-canvas"></canvas>
 
     <script>
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        
+        if (!firebase.apps.length) { 
+            firebase.initializeApp(firebaseConfig); 
+        }
+        const db = firebase.firestore();
+
         const uiLayer = document.getElementById('ui-layer');
         const mainMenu = document.getElementById('main-menu');
         const loadingView = document.getElementById('loading-view');
@@ -82,14 +109,30 @@
         canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
         canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
 
-        let audioContext, audioBuffer, audioSource, analyser;
-        let isPlaying = false, score = 0, combo = 0, misses = 0, lastSpawnTime = 0;
+        let audioContext, audioBuffer, audioSource;
+        let isPlaying = false, score = 0, combo = 0, misses = 0, frameCount = 0;
         const MAX_MISSES = 20; 
         let notes = [], lanes = [canvas.width*0.2, canvas.width*0.4, canvas.width*0.6, canvas.width*0.8];
+        let currentSongName = "Unknown Track";
+
+        function fetchLeaderboard() {
+            db.collection("scores").orderBy("score", "desc").limit(5).get().then((querySnapshot) => {
+                let html = "";
+                querySnapshot.forEach((doc) => {
+                    let d = doc.data();
+                    html += `<div>${d.player}: ${d.score} (${d.song})</div>`;
+                });
+                document.getElementById('leaderboard-list').innerHTML = html || "<div>No scores yet!</div>";
+            }).catch(err => {
+                document.getElementById('leaderboard-list').innerHTML = "<div>Leaderboard offline</div>";
+            });
+        }
+        fetchLeaderboard();
 
         document.getElementById('audio-upload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            currentSongName = file.name.replace(/\.[^/.]+$/, "");
 
             mainMenu.classList.add('hidden');
             loadingView.classList.remove('hidden');
@@ -97,9 +140,6 @@
             try {
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
                 audioContext = new AudioCtx();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
-
                 const arrayBuffer = await file.arrayBuffer();
 
                 audioContext.decodeAudioData(arrayBuffer, 
@@ -109,13 +149,13 @@
                         startBtn.classList.remove('hidden');
                     }, 
                     (error) => {
-                        alert("Audio decode failed. Make sure it's a valid MP3 file.");
+                        alert("Audio decode failed. Make sure it's a valid MP3.");
                         loadingView.classList.add('hidden');
                         mainMenu.classList.remove('hidden');
                     }
                 );
             } catch (error) {
-                alert("Failed to process the audio file.");
+                alert("Failed to process local audio track.");
                 loadingView.classList.add('hidden');
                 mainMenu.classList.remove('hidden');
             }
@@ -128,17 +168,16 @@
             uiLayer.classList.add('hidden');
             hud.classList.remove('hidden');
 
-            score = 0; combo = 0; misses = 0; notes = []; lastSpawnTime = 0;
+            score = 0; combo = 0; misses = 0; notes = []; frameCount = 0;
             updateHUD();
 
             audioSource = audioContext.createBufferSource();
             audioSource.buffer = audioBuffer;
-            audioSource.connect(analyser);
-            analyser.connect(audioContext.destination);
+            audioSource.connect(audioContext.destination);
             audioSource.start(0);
             
             isPlaying = true;
-            audioSource.onended = endGame;
+            audioSource.onended = finishGame;
             requestAnimationFrame(gameLoop);
         }
 
@@ -146,20 +185,18 @@
             notes.push({ x: lanes[Math.floor(Math.random() * 4)], y: -50, radius: 30, active: true });
         }
 
-        function gameLoop(timestamp) {
+        function gameLoop() {
             if (!isPlaying) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frameCount++;
             
-            ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
+            // Draw lanes
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 4;
             lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
             
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
-            let avgEnergy = dataArray.reduce((a, b) => a + b) / dataArray.length;
-            
-            if (avgEnergy > 150 && Math.random() > 0.5 && timestamp - lastSpawnTime > 350) {
+            // Reliable rhythm flow: Drops a playable note steadily every 40 frames (~1.5 seconds)
+            if (frameCount % 40 === 0) {
                 spawnNote();
-                lastSpawnTime = timestamp;
             }
 
             const hitY = canvas.height - 120;
@@ -168,7 +205,7 @@
 
             for (let i = notes.length - 1; i >= 0; i--) {
                 let note = notes[i];
-                note.y += 3.5; 
+                note.y += 3.5; // Smooth, manageable speed
 
                 ctx.fillStyle = '#ffaa00';
                 ctx.beginPath(); ctx.arc(note.x, note.y, note.radius, 0, Math.PI * 2); ctx.fill();
@@ -176,7 +213,12 @@
                 ctx.beginPath(); ctx.arc(note.x, note.y, note.radius * 0.6, 0, Math.PI * 2); ctx.fill();
 
                 if (note.y > canvas.height) {
-                    if (note.active) { misses++; combo = 0; updateHUD(); if (misses >= MAX_MISSES) failGame(); }
+                    if (note.active) { 
+                        misses++; 
+                        combo = 0; 
+                        updateHUD(); 
+                        if (misses >= MAX_MISSES) failGame(); 
+                    }
                     notes.splice(i, 1);
                 }
             }
@@ -193,11 +235,18 @@
                 if (Math.abs(note.y - hitY) < 80 && Math.abs(note.x - touch.clientX) < 80) {
                     note.active = false;
                     score += 100 + (combo * 10);
-                    combo++; hit = true; updateHUD();
+                    combo++; 
+                    hit = true; 
+                    updateHUD();
                 }
             });
 
-            if (!hit) { combo = 0; misses++; updateHUD(); if (misses >= MAX_MISSES) failGame(); }
+            if (!hit) { 
+                combo = 0; 
+                misses++; 
+                updateHUD(); 
+                if (misses >= MAX_MISSES) failGame(); 
+            }
         });
 
         function updateHUD() {
@@ -207,8 +256,23 @@
         }
 
         function failGame() {
-            audioSource.stop();
+            if(audioSource) audioSource.stop();
             alert("Gig Over! The crowd booed you off.");
+            endGame();
+        }
+
+        function finishGame() {
+            let playerName = document.getElementById('player-name').value || "Anonymous";
+            db.collection("scores").add({
+                player: playerName,
+                score: score,
+                song: currentSongName,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                fetchLeaderboard();
+            }).catch(error => {
+                console.error("Error writing score: ", error);
+            });
             endGame();
         }
 
@@ -219,6 +283,7 @@
             mainMenu.classList.remove('hidden');
             loadingText.classList.remove('hidden');
             startBtn.classList.add('hidden');
+            fetchLeaderboard();
         }
     </script>
 </body>
