@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Club Rhythm - Classic Edition</title>
+    <title>Club Rhythm - Global Tour</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #0a0a0a; color: #fff;
             font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none;
         }
         #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            position: absolute; top: -20px; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             background: radial-gradient(circle, #2a0000 0%, #000 90%); z-index: 10;
         }
@@ -36,7 +36,7 @@
         #start-btn { background: #00ff00; color: #000; border-color: #00ff00; box-shadow: 0 0 15px #00ff00; }
         #leaderboard {
             margin-top: 15px; background: rgba(0,0,0,0.6); border: 1px solid #ff3300;
-            padding: 10px; width: 80%; max-width: 300px; max-height: 120px; overflow-y: auto; font-size: 0.85rem;
+            padding: 10px; width: 80%; max-width: 300px; max-height: 150px; overflow-y: auto; font-size: 0.9rem;
         }
     </style>
     <!-- Firebase SDKs -->
@@ -47,7 +47,7 @@
 
     <div id="ui-layer">
         <h1>CLUB RHYTHM</h1>
-        <p style="color: #ccc; margin-bottom: 15px;">Rock Star Edition</p>
+        <p style="color: #ccc; margin-bottom: 10px;">Global Tour Edition</p>
         
         <input type="text" id="player-name" placeholder="Enter DJ Name" value="DarthN8erS">
 
@@ -109,22 +109,10 @@
         canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
 
         let audioContext, audioBuffer, audioSource, analyser;
-        let isPlaying = false, score = 0, combo = 0, misses = 0, lastSpawnTime = 0;
+        let isPlaying = false, score = 0, combo = 0, misses = 0, frameCount = 0;
         const MAX_MISSES = 20; 
-        
-        let laneWidth = 70;
-        let startX = (canvas.width - (laneWidth * 4)) / 2;
-        let lanes = [
-            startX + laneWidth * 0,
-            startX + laneWidth * 1,
-            startX + laneWidth * 2,
-            startX + laneWidth * 3
-        ];
-        
-        let notes = [];
+        let notes = [], lanes = [canvas.width*0.2, canvas.width*0.4, canvas.width*0.6, canvas.width*0.8];
         let currentSongName = "Unknown Track";
-        let feedbackText = "", feedbackColor = "#fff", feedbackTimer = 0;
-        const laneColors = ['#ff0055', '#00ffcc', '#ffee00', '#0077ff'];
 
         function fetchLeaderboard() {
             db.collection("scores").orderBy("score", "desc").limit(5).get().then((querySnapshot) => {
@@ -163,13 +151,13 @@
                         startBtn.classList.remove('hidden');
                     }, 
                     (error) => {
-                        alert("Audio decode failed. Make sure it's a valid MP3.");
+                        alert("Audio decode failed. The file might not be a valid MP3.");
                         loadingView.classList.add('hidden');
                         mainMenu.classList.remove('hidden');
                     }
                 );
             } catch (error) {
-                alert("Failed to process local audio track.");
+                alert("Failed to process the local track.");
                 loadingView.classList.add('hidden');
                 mainMenu.classList.remove('hidden');
             }
@@ -182,7 +170,7 @@
             uiLayer.classList.add('hidden');
             hud.classList.remove('hidden');
 
-            score = 0; combo = 0; misses = 0; notes = []; lastSpawnTime = 0;
+            score = 0; combo = 0; misses = 0; notes = []; frameCount = 0;
             updateHUD();
 
             audioSource = audioContext.createBufferSource();
@@ -197,140 +185,61 @@
         }
 
         function spawnNote() {
-            let laneIndex = Math.floor(Math.random() * 4);
-            notes.push({ lane: laneIndex, y: -40, active: true });
+            notes.push({ x: lanes[Math.floor(Math.random() * 4)], y: -50, radius: 30, active: true });
         }
 
-        function gameLoop(timestamp) {
+        function gameLoop() {
             if (!isPlaying) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frameCount++;
             
-            // Analyze audio frequencies for dynamic rhythm synchronization
+            ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
+            lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
+            
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
             analyser.getByteFrequencyData(dataArray);
             let avgEnergy = dataArray.reduce((a, b) => a + b) / dataArray.length;
-
-            // Spawn notes based on audio peaks + smooth time fallback
-            if ((avgEnergy > 110 && timestamp - lastSpawnTime > 300) || timestamp - lastSpawnTime > 700) {
+            
+            if ((avgEnergy > 80 && Math.random() > 0.4) || frameCount % 50 === 0) {
                 spawnNote();
-                lastSpawnTime = timestamp;
             }
 
-            // Fretboard background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            ctx.fillRect(startX, 0, laneWidth * 4, canvas.height);
+            const hitY = canvas.height - 120;
+            ctx.fillStyle = 'rgba(255, 51, 0, 0.3)';
+            ctx.fillRect(0, hitY - 40, canvas.width, 80);
 
-            // Vertical lanes
-            ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
-            for (let i = 0; i <= 4; i++) {
-                ctx.beginPath();
-                ctx.moveTo(startX + (i * laneWidth), 0);
-                ctx.lineTo(startX + (i * laneWidth), canvas.height);
-                ctx.stroke();
-            }
-
-            // Target Hit Line
-            const hitY = canvas.height - 140;
-            ctx.strokeStyle = '#ff3300'; ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(startX, hitY);
-            ctx.lineTo(startX + (laneWidth * 4), hitY);
-            ctx.stroke();
-
-            // Permanent target buttons at bottom of lanes
-            lanes.forEach((x, idx) => {
-                ctx.fillStyle = laneColors[idx];
-                ctx.fillRect(x + 5, hitY - 15, laneWidth - 10, 30);
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                ctx.strokeRect(x + 5, hitY - 15, laneWidth - 10, 30);
-            });
-
-            // Falling rectangular notes
             for (let i = notes.length - 1; i >= 0; i--) {
                 let note = notes[i];
-                note.y += 4.5; 
+                note.y += 3.5; 
 
-                let noteX = lanes[note.lane] + 5;
-                let noteW = laneWidth - 10;
-                let noteH = 24;
+                ctx.fillStyle = '#ffaa00';
+                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#ff3300';
+                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius * 0.6, 0, Math.PI * 2); ctx.fill();
 
-                ctx.fillStyle = laneColors[note.lane];
-                ctx.fillRect(noteX, note.y, noteW, noteH);
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                ctx.strokeRect(noteX, note.y, noteW, noteH);
-
-                if (note.y > hitY + 30) {
-                    if (note.active) { 
-                        misses++; 
-                        combo = 0; 
-                        feedbackText = "MISS";
-                        feedbackColor = "#ff0000";
-                        feedbackTimer = 20;
-                        updateHUD(); 
-                        if (misses >= MAX_MISSES) failGame(); 
-                    }
+                if (note.y > canvas.height) {
+                    if (note.active) { misses++; combo = 0; updateHUD(); if (misses >= MAX_MISSES) failGame(); }
                     notes.splice(i, 1);
                 }
             }
-
-            // Feedback Text
-            if (feedbackTimer > 0) {
-                feedbackTimer--;
-                ctx.font = "bold 28px 'Courier New'";
-                ctx.fillStyle = feedbackColor;
-                ctx.textAlign = "center";
-                ctx.fillText(feedbackText, canvas.width / 2, canvas.height / 2 - 80);
-            }
-
             requestAnimationFrame(gameLoop);
         }
 
         canvas.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
-            const hitY = canvas.height - 140;
+            const hitY = canvas.height - 120;
             let hit = false;
-
-            let tappedLane = -1;
-            lanes.forEach((x, idx) => {
-                if (touch.clientX >= x && touch.clientX <= x + laneWidth) {
-                    tappedLane = idx;
+            
+            notes.forEach(note => {
+                if (!note.active) return;
+                if (Math.abs(note.y - hitY) < 80 && Math.abs(note.x - touch.clientX) < 80) {
+                    note.active = false;
+                    score += 100 + (combo * 10);
+                    combo++; hit = true; updateHUD();
                 }
             });
 
-            if (tappedLane !== -1) {
-                notes.forEach(note => {
-                    if (!note.active || note.lane !== tappedLane) return;
-                    let distance = Math.abs(note.y - hitY);
-                    
-                    if (distance < 50) {
-                        note.active = false;
-                        hit = true;
-
-                        if (distance < 18) {
-                            score += 300 + (combo * 15);
-                            feedbackText = "PERFECT!";
-                            feedbackColor = "#00ff00";
-                        } else {
-                            score += 100 + (combo * 5);
-                            feedbackText = "GOOD";
-                            feedbackColor = "#ffaa00";
-                        }
-                        combo++;
-                        feedbackTimer = 20;
-                        updateHUD();
-                    }
-                });
-            }
-
-            if (!hit && Math.abs(touch.clientY - hitY) < 100) {
-                combo = 0;
-                misses++;
-                feedbackText = "BAD";
-                feedbackColor = "#ff0000";
-                feedbackTimer = 20;
-                updateHUD();
-                if (misses >= MAX_MISSES) failGame();
-            }
+            if (!hit) { combo = 0; misses++; updateHUD(); if (misses >= MAX_MISSES) failGame(); }
         });
 
         function updateHUD() {
@@ -340,7 +249,7 @@
         }
 
         function failGame() {
-            if(audioSource) audioSource.stop();
+            audioSource.stop();
             alert("Gig Over! The crowd booed you off.");
             endGame();
         }
