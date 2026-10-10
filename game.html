@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Gig - Global Tour</title>
+    <title>Club Rhythm - Guitar Hero Edition</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #0a0a0a; color: #fff;
@@ -47,7 +47,7 @@
 
     <div id="ui-layer">
         <h1>NEON GIG</h1>
-        <p style="color: #ccc; margin-bottom: 15px;">Global Tour Edition</p>
+        <p style="color: #ccc; margin-bottom: 15px;">Guitar Hero Edition</p>
         
         <input type="text" id="player-name" placeholder="Enter DJ Name" value="DarthN8erS">
 
@@ -111,8 +111,20 @@
         let audioContext, audioBuffer, audioSource;
         let isPlaying = false, score = 0, combo = 0, misses = 0, frameCount = 0;
         const MAX_MISSES = 20; 
-        let notes = [], lanes = [canvas.width*0.2, canvas.width*0.4, canvas.width*0.6, canvas.width*0.8];
+        
+        // Lane X coordinates across the screen width
+        let laneWidth = 70;
+        let startX = (canvas.width - (laneWidth * 4)) / 2;
+        let lanes = [
+            startX + laneWidth * 0,
+            startX + laneWidth * 1,
+            startX + laneWidth * 2,
+            startX + laneWidth * 3
+        ];
+        
         let currentSongName = "Unknown Track";
+        let feedbackText = "", feedbackColor = "#fff", feedbackTimer = 0;
+        const laneColors = ['#ff0055', '#00ffcc', '#ffee00', '#0077ff'];
 
         function fetchLeaderboard() {
             db.collection("scores").orderBy("score", "desc").limit(5).get().then((querySnapshot) => {
@@ -180,8 +192,10 @@
             requestAnimationFrame(gameLoop);
         }
 
+        let notes = [];
         function spawnNote() {
-            notes.push({ x: lanes[Math.floor(Math.random() * 4)], y: -50, radius: 25, active: true });
+            let laneIndex = Math.floor(Math.random() * 4);
+            notes.push({ lane: laneIndex, y: -40, active: true });
         }
 
         function gameLoop() {
@@ -189,60 +203,125 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             frameCount++;
             
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 3;
-            lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
-            
+            // Draw Fretboard background container
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(startX, 0, laneWidth * 4, canvas.height);
+
+            // Draw vertical lane dividers
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+            for (let i = 0; i <= 4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(startX + (i * laneWidth), 0);
+                ctx.lineTo(startX + (i * laneWidth), canvas.height);
+                ctx.stroke();
+            }
+
+            // Target Hit Line at bottom
+            const hitY = canvas.height - 140;
+            ctx.strokeStyle = '#ff3300'; ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(startX, hitY);
+            ctx.lineTo(startX + (laneWidth * 4), hitY);
+            ctx.stroke();
+
+            // Permanent rectangular target buttons at the bottom of each lane
+            lanes.forEach((x, idx) => {
+                ctx.fillStyle = laneColors[idx];
+                ctx.fillRect(x + 5, hitY - 15, laneWidth - 10, 30);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                ctx.strokeRect(x + 5, hitY - 15, laneWidth - 10, 30);
+            });
+
             if (frameCount % 45 === 0) {
                 spawnNote();
             }
 
-            const hitY = canvas.height - 120;
-            ctx.fillStyle = 'rgba(255, 51, 0, 0.2)';
-            ctx.fillRect(lanes[0] - 30, hitY - 30, lanes[3] - lanes[0] + 60, 60);
-
+            // Draw falling rectangular Guitar Hero notes
             for (let i = notes.length - 1; i >= 0; i--) {
                 let note = notes[i];
-                note.y += 4; 
+                note.y += 4.5; // Smooth fall speed
 
-                ctx.fillStyle = '#ffaa00';
-                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#ff3300';
-                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius * 0.5, 0, Math.PI * 2); ctx.fill();
+                let noteX = lanes[note.lane] + 5;
+                let noteW = laneWidth - 10;
+                let noteH = 24;
 
-                if (note.y > canvas.height) {
+                ctx.fillStyle = laneColors[note.lane];
+                ctx.fillRect(noteX, note.y, noteW, noteH);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                ctx.strokeRect(noteX, note.y, noteW, noteH);
+
+                // Check if note passes bottom without being hit (Miss)
+                if (note.y > hitY + 30) {
                     if (note.active) { 
                         misses++; 
                         combo = 0; 
+                        feedbackText = "MISS";
+                        feedbackColor = "#ff0000";
+                        feedbackTimer = 20;
                         updateHUD(); 
                         if (misses >= MAX_MISSES) failGame(); 
                     }
                     notes.splice(i, 1);
                 }
             }
+
+            // Pop-up Feedback Text (PERFECT, GOOD, MISS)
+            if (feedbackTimer > 0) {
+                feedbackTimer--;
+                ctx.font = "bold 28px 'Courier New'";
+                ctx.fillStyle = feedbackColor;
+                ctx.textAlign = "center";
+                ctx.fillText(feedbackText, canvas.width / 2, canvas.height / 2 - 80);
+            }
+
             requestAnimationFrame(gameLoop);
         }
 
         canvas.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
-            const hitY = canvas.height - 120;
+            const hitY = canvas.height - 140;
             let hit = false;
-            
-            notes.forEach(note => {
-                if (!note.active) return;
-                if (Math.abs(note.y - hitY) < 50 && Math.abs(note.x - touch.clientX) < 50) {
-                    note.active = false;
-                    score += 100 + (combo * 10);
-                    combo++; 
-                    hit = true; 
-                    updateHUD();
+
+            let tappedLane = -1;
+            lanes.forEach((x, idx) => {
+                if (touch.clientX >= x && touch.clientX <= x + laneWidth) {
+                    tappedLane = idx;
                 }
             });
 
-            if (!hit) { 
-                combo = 0; 
-                misses++; 
-                updateHUD(); 
-                if (misses >= MAX_MISSES) failGame(); 
+            if (tappedLane !== -1) {
+                notes.forEach(note => {
+                    if (!note.active || note.lane !== tappedLane) return;
+                    let distance = Math.abs(note.y - hitY);
+                    
+                    if (distance < 50) {
+                        note.active = false;
+                        hit = true;
+
+                        if (distance < 18) {
+                            score += 300 + (combo * 15);
+                            feedbackText = "PERFECT!";
+                            feedbackColor = "#00ff00";
+                        } else {
+                            score += 100 + (combo * 5);
+                            feedbackText = "GOOD";
+                            feedbackColor = "#ffaa00";
+                        }
+                        combo++;
+                        feedbackTimer = 20;
+                        updateHUD();
+                    }
+                });
+            }
+
+            if (!hit && Math.abs(touch.clientY - hitY) < 100) {
+                combo = 0;
+                misses++;
+                feedbackText = "BAD";
+                feedbackColor = "#ff0000";
+                feedbackTimer = 20;
+                updateHUD();
+                if (misses >= MAX_MISSES) failGame();
             }
         });
 
