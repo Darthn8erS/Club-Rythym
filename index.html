@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Gig - Rock Band Edition</title>
+    <title>Club Rhythm - Classic Edition</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #0a0a0a; color: #fff;
             font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none;
         }
         #ui-layer {
-            position: absolute; top: -20px; left: 0; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             background: radial-gradient(circle, #2a0000 0%, #000 90%); z-index: 10;
         }
@@ -46,8 +46,8 @@
 <body>
 
     <div id="ui-layer">
-        <h1>NEON GIG</h1>
-        <p style="color: #ccc; margin-bottom: 15px;">Rock Band Edition</p>
+        <h1>CLUB RHYTHM</h1>
+        <p style="color: #ccc; margin-bottom: 15px;">Classic Rock Edition</p>
         
         <input type="text" id="player-name" placeholder="Enter DJ Name" value="DarthN8erS">
 
@@ -113,7 +113,6 @@
         const MAX_MISSES = 20; 
         let notes = [], lanes = [canvas.width*0.2, canvas.width*0.4, canvas.width*0.6, canvas.width*0.8];
         let currentSongName = "Unknown Track";
-        let feedbackText = "", feedbackColor = "#fff", feedbackTimer = 0;
 
         function fetchLeaderboard() {
             db.collection("scores").orderBy("score", "desc").limit(5).get().then((querySnapshot) => {
@@ -182,8 +181,7 @@
         }
 
         function spawnNote() {
-            let laneIndex = Math.floor(Math.random() * 4);
-            notes.push({ lane: laneIndex, x: lanes[laneIndex], y: -30, active: true });
+            notes.push({ x: lanes[Math.floor(Math.random() * 4)], y: -50, radius: 30, active: true });
         }
 
         function gameLoop() {
@@ -191,111 +189,60 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             frameCount++;
             
-            // Fretboard background & 4 vertical lanes
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(lanes[0] - 40, 0, lanes[3] - lanes[0] + 80, canvas.height);
-
-            ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+            ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
             lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
-
-            // Rock Band Target Strike Line at bottom
-            const hitY = canvas.height - 140;
-            ctx.strokeStyle = '#ff3300'; ctx.lineWidth = 6;
-            ctx.beginPath(); ctx.moveTo(lanes[0] - 40, hitY); ctx.lineTo(lanes[3] + 40, hitY); ctx.stroke();
-
-            // Target buttons at the strike line
-            lanes.forEach((x, idx) => {
-                ctx.fillStyle = ['#ff0055', '#00ffcc', '#ffee00', '#0077ff'][idx];
-                ctx.beginPath(); ctx.arc(x, hitY, 22, 0, Math.PI * 2); ctx.fill();
-            });
-
-            // Steady note spacing
+            
             if (frameCount % 45 === 0) {
                 spawnNote();
             }
 
-            // Render Notes (Rock Band style colored pill/circles)
+            const hitY = canvas.height - 120;
+            ctx.fillStyle = 'rgba(255, 51, 0, 0.3)';
+            ctx.fillRect(0, hitY - 40, canvas.width, 80);
+
             for (let i = notes.length - 1; i >= 0; i--) {
                 let note = notes[i];
-                note.y += 4; // Consistent fall speed
+                note.y += 4; 
 
-                ctx.fillStyle = ['#ff0055', '#00ffcc', '#ffee00', '#0077ff'][note.lane];
-                ctx.beginPath(); ctx.arc(note.x, note.y, 20, 0, Math.PI * 2); ctx.fill();
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#ffaa00';
+                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#ff3300';
+                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius * 0.6, 0, Math.PI * 2); ctx.fill();
 
-                // Miss check if it passes the hit line
-                if (note.y > hitY + 40) {
-                    if (note.active) {
-                        misses++;
-                        combo = 0;
-                        feedbackText = "MISS";
-                        feedbackColor = "#ff0000";
-                        feedbackTimer = 20;
-                        updateHUD();
-                        if (misses >= MAX_MISSES) failGame();
+                if (note.y > canvas.height) {
+                    if (note.active) { 
+                        misses++; 
+                        combo = 0; 
+                        updateHUD(); 
+                        if (misses >= MAX_MISSES) failGame(); 
                     }
                     notes.splice(i, 1);
                 }
             }
-
-            // Draw Pop-up Judgment Text (PERFECT, GOOD, MISS)
-            if (feedbackTimer > 0) {
-                feedbackTimer--;
-                ctx.font = "bold 28px 'Courier New'";
-                ctx.fillStyle = feedbackColor;
-                ctx.textAlign = "center";
-                ctx.fillText(feedbackText, canvas.width / 2, canvas.height / 2 - 50);
-            }
-
             requestAnimationFrame(gameLoop);
         }
 
         canvas.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
-            const hitY = canvas.height - 140;
-            let hitRegistered = false;
-
-            // Determine which lane was tapped based on X coordinate
-            let tappedLane = -1;
-            lanes.forEach((x, idx) => {
-                if (Math.abs(touch.clientX - x) < 60) {
-                    tappedLane = idx;
+            const hitY = canvas.height - 120;
+            let hit = false;
+            
+            notes.forEach(note => {
+                if (!note.active) return;
+                if (Math.abs(note.y - hitY) < 80 && Math.abs(note.x - touch.clientX) < 80) {
+                    note.active = false;
+                    score += 100 + (combo * 10);
+                    combo++; 
+                    hit = true; 
+                    updateHUD();
                 }
             });
 
-            if (tappedLane !== -1) {
-                notes.forEach(note => {
-                    if (!note.active || note.lane !== tappedLane) return;
-                    let distance = Math.abs(note.y - hitY);
-                    
-                    if (distance < 50) { // Within strike zone
-                        note.active = false;
-                        hitRegistered = true;
-
-                        if (distance < 15) {
-                            score += 300 + (combo * 15);
-                            feedbackText = "PERFECT!";
-                            feedbackColor = "#00ff00";
-                        } else {
-                            score += 100 + (combo * 5);
-                            feedbackText = "GOOD";
-                            feedbackColor = "#ffaa00";
-                        }
-                        combo++;
-                        feedbackTimer = 20;
-                        updateHUD();
-                    }
-                });
-            }
-
-            if (!hitRegistered && Math.abs(touch.clientY - hitY) < 100) {
-                combo = 0;
-                misses++;
-                feedbackText = "BAD TAP";
-                feedbackColor = "#ff0000";
-                feedbackTimer = 20;
-                updateHUD();
-                if (misses >= MAX_MISSES) failGame();
+            if (!hit) { 
+                combo = 0; 
+                misses++; 
+                updateHUD(); 
+                if (misses >= MAX_MISSES) failGame(); 
             }
         });
 
