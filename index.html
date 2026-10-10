@@ -3,102 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Club Rhythm - Global Tour</title>
+    <title>Neon Gig - Global Library Edition</title>
     <style>
         body {
-            margin: 0; padding: 0; background-color: #0a0a0a; color: #fff;
+            margin: 0; padding: 0; background-color: #111; color: #fff;
             font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none;
         }
         #ui-layer {
-            position: absolute; top: -20px; left: 0; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: radial-gradient(circle, #2a0000 0%, #000 90%); z-index: 10;
+            background: rgba(0, 0, 0, 0.9); z-index: 10;
         }
         .hidden { display: none !important; }
-        h1 { color: #ff3300; text-shadow: 0 0 15px #ff3300; text-align: center; letter-spacing: 2px; }
-        .upload-btn, button {
-            background: #111; color: #ff3300; border: 2px solid #ff3300;
+        h1 { color: #ff5500; text-shadow: 0 0 10px #ff5500; text-align: center; }
+        button, .upload-btn {
+            background: #222; color: #ff5500; border: 2px solid #ff5500;
             padding: 15px 30px; font-size: 1.2rem; margin: 10px; cursor: pointer;
             border-radius: 5px; text-transform: uppercase; font-weight: bold;
-            box-shadow: 0 0 10px #ff3300; text-align: center; display: inline-block;
+            box-shadow: 0 0 10px #ff5500; text-align: center; display: inline-block;
         }
-        .upload-btn:active, button:active { background: #ff3300; color: #111; }
+        button:active, .upload-btn:active { background: #ff5500; color: #111; }
         input[type="file"] { display: none; }
         input[type="text"] {
             padding: 10px; font-size: 1.2rem; margin-bottom: 20px;
-            border: 2px solid #ff3300; background: #222; color: #fff; text-align: center;
+            border: 2px solid #ff5500; background: #222; color: #fff; text-align: center;
         }
         #game-canvas { display: block; width: 100vw; height: 100vh; }
         #hud {
             position: absolute; top: 10px; left: 10px; z-index: 5;
             pointer-events: none; text-shadow: 2px 2px 4px #000; font-size: 1.2rem;
         }
-        #start-btn { background: #00ff00; color: #000; border-color: #00ff00; box-shadow: 0 0 15px #00ff00; }
-        #leaderboard {
-            margin-top: 15px; background: rgba(0,0,0,0.6); border: 1px solid #ff3300;
-            padding: 10px; width: 80%; max-width: 300px; max-height: 150px; overflow-y: auto; font-size: 0.9rem;
+        .panel {
+            max-height: 70vh; overflow-y: auto; width: 90%; max-width: 600px;
+            background: #222; border: 2px solid #ff5500; padding: 15px; border-radius: 5px;
         }
+        .song-entry {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #444; padding: 15px 0;
+        }
+        .play-btn {
+            background: #00ffff; color: #111; border: none; padding: 10px 15px;
+            font-weight: bold; cursor: pointer; border-radius: 3px;
+        }
+        #loading-text { color: #00ffff; margin-top: 20px; font-weight: bold; text-align: center; }
     </style>
-    <!-- Firebase SDKs -->
+    <!-- Firebase Firestore Only (No Storage Required) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 
     <div id="ui-layer">
-        <h1>CLUB RHYTHM</h1>
-        <p style="color: #ccc; margin-bottom: 10px;">Global Tour Edition</p>
+        <h1>NEON GIG</h1>
+        <input type="text" id="player-name" placeholder="Enter DJ Name" value="DJ Player">
         
-        <input type="text" id="player-name" placeholder="Enter DJ Name" value="DarthN8erS">
-
         <div id="main-menu">
             <label class="upload-btn">
-                Upload MP3 & Play
+                Add Song to Library (Upload MP3)
                 <input type="file" id="audio-upload" accept="audio/mp3, audio/mpeg">
             </label>
+            <br>
+            <button id="btn-library">View Library & Leaderboard</button>
+        </div>
+
+        <div id="library-view" class="panel hidden">
+            <h2 style="color: #00ffff; text-align: center;">Global Track Library</h2>
+            <div id="song-list">Loading tracks...</div>
+            <button id="btn-back" style="width: 100%;">Back to Menu</button>
         </div>
         
         <div id="loading-view" class="hidden">
-            <h2 id="loading-text">Decoding Audio...</h2>
-            <button id="start-btn" class="hidden">TAP TO START GIG</button>
-        </div>
-
-        <div id="leaderboard">
-            <div style="font-weight: bold; border-bottom: 1px solid #ff3300; margin-bottom: 5px;">GLOBAL LEADERBOARD</div>
-            <div id="leaderboard-list">Loading scores...</div>
+            <h2 id="loading-title">Uploading to Global Library...</h2>
+            <p id="loading-text">Please wait. Do not close the game.</p>
         </div>
     </div>
 
     <div id="hud" class="hidden">
         <div>Score: <span id="score-display">0</span></div>
         <div>Combo: <span id="combo-display">0</span></div>
-        <div style="color: #ff3333; margin-top: 5px;">Misses Left: <span id="misses-display">20</span></div>
+        <div style="color: #ff3333; margin-top: 5px;">Misses Left: <span id="misses-display">10</span></div>
+        <div style="color: #00ffff; margin-top: 5px;">Crowd Vibe: <span id="vibe-display">100%</span></div>
     </div>
 
     <canvas id="game-canvas"></canvas>
 
     <script>
+        // Initialize Firebase Database ONLY
+        // REPLACE THESE WITH YOUR FREE FIREBASE PROJECT KEYS
         const firebaseConfig = {
             apiKey: "YOUR_API_KEY",
             authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
+            projectId: "YOUR_PROJECT_ID"
         };
-        
-        if (!firebase.apps.length) { 
-            firebase.initializeApp(firebaseConfig); 
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.firestore();
 
+        // UI Elements
         const uiLayer = document.getElementById('ui-layer');
         const mainMenu = document.getElementById('main-menu');
+        const libraryView = document.getElementById('library-view');
         const loadingView = document.getElementById('loading-view');
-        const loadingText = document.getElementById('loading-text');
-        const startBtn = document.getElementById('start-btn');
         const hud = document.getElementById('hud');
         
+        // Canvas Setup
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth;
@@ -109,68 +118,92 @@
         canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
 
         let audioContext, audioBuffer, audioSource, analyser;
-        let isPlaying = false, score = 0, combo = 0, misses = 0, frameCount = 0;
-        const MAX_MISSES = 20; 
+        let isPlaying = false, score = 0, combo = 0, misses = 0;
+        const MAX_MISSES = 10;
         let notes = [], lanes = [canvas.width*0.2, canvas.width*0.4, canvas.width*0.6, canvas.width*0.8];
-        let currentSongName = "Unknown Track";
+        let currentSongUrl = null, currentSongName = null;
 
-        function fetchLeaderboard() {
-            db.collection("scores").orderBy("score", "desc").limit(5).get().then((querySnapshot) => {
-                let html = "";
-                querySnapshot.forEach((doc) => {
-                    let d = doc.data();
-                    html += `<div>${d.player}: ${d.score} (${d.song})</div>`;
-                });
-                document.getElementById('leaderboard-list').innerHTML = html || "<div>No scores yet!</div>";
-            }).catch(err => {
-                document.getElementById('leaderboard-list').innerHTML = "<div>Leaderboard offline</div>";
-            });
-        }
-        fetchLeaderboard();
+        document.getElementById('btn-library').addEventListener('click', loadLibrary);
+        document.getElementById('btn-back').addEventListener('click', () => {
+            libraryView.classList.add('hidden');
+            mainMenu.classList.remove('hidden');
+        });
 
+        // Catbox API Upload Workflow
         document.getElementById('audio-upload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            currentSongName = file.name.replace(/\.[^/.]+$/, "");
 
+            currentSongName = file.name.replace('.mp3', '');
             mainMenu.classList.add('hidden');
             loadingView.classList.remove('hidden');
+            document.getElementById('loading-title').innerText = "Uploading to Global Library...";
+            document.getElementById('loading-text').innerText = "Uploading to Catbox.moe... This may take a minute.";
 
             try {
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                audioContext = new AudioCtx();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
+                const formData = new FormData();
+                formData.append('reqtype', 'fileupload');
+                formData.append('fileToUpload', file);
 
+                // Use corsproxy to bypass browser restrictions on Catbox API
+                const response = await fetch('https://corsproxy.io/?https://catbox.moe/user/api.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Upload failed.");
+                currentSongUrl = await response.text(); // Returns the permanent mp3 link
+
+                document.getElementById('loading-text').innerText = "Analyzing Beats...";
+                
+                // Read local file instantly to start the game while URL is ready for database
                 const arrayBuffer = await file.arrayBuffer();
+                setupAudio(arrayBuffer);
 
-                audioContext.decodeAudioData(arrayBuffer, 
-                    (buffer) => {
-                        audioBuffer = buffer;
-                        loadingText.classList.add('hidden');
-                        startBtn.classList.remove('hidden');
-                    }, 
-                    (error) => {
-                        alert("Audio decode failed. The file might not be a valid MP3.");
-                        loadingView.classList.add('hidden');
-                        mainMenu.classList.remove('hidden');
-                    }
-                );
             } catch (error) {
-                alert("Failed to process the local track.");
+                alert("Upload failed. Try again.");
                 loadingView.classList.add('hidden');
                 mainMenu.classList.remove('hidden');
             }
         });
 
-        startBtn.addEventListener('click', startGame);
+        async function playFromLibrary(url, songName) {
+            currentSongUrl = url;
+            currentSongName = songName;
+            
+            libraryView.classList.add('hidden');
+            loadingView.classList.remove('hidden');
+            document.getElementById('loading-title').innerText = "Loading Track...";
+            document.getElementById('loading-text').innerText = "Fetching audio from server...";
+
+            try {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                setupAudio(arrayBuffer);
+            } catch (e) {
+                alert("Could not load track. The link might be broken.");
+                loadingView.classList.add('hidden');
+                mainMenu.classList.remove('hidden');
+            }
+        }
+
+        function setupAudio(arrayBuffer) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+
+            audioContext.decodeAudioData(arrayBuffer, (buffer) => {
+                audioBuffer = buffer;
+                startGame();
+            });
+        }
 
         function startGame() {
             loadingView.classList.add('hidden');
             uiLayer.classList.add('hidden');
             hud.classList.remove('hidden');
 
-            score = 0; combo = 0; misses = 0; notes = []; frameCount = 0;
+            score = 0; combo = 0; misses = 0; notes = [];
             updateHUD();
 
             audioSource = audioContext.createBufferSource();
@@ -180,7 +213,7 @@
             audioSource.start(0);
             
             isPlaying = true;
-            audioSource.onended = finishGame;
+            audioSource.onended = endGame;
             requestAnimationFrame(gameLoop);
         }
 
@@ -191,32 +224,26 @@
         function gameLoop() {
             if (!isPlaying) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            frameCount++;
-            
-            ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
-            lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
             
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
             analyser.getByteFrequencyData(dataArray);
             let avgEnergy = dataArray.reduce((a, b) => a + b) / dataArray.length;
             
-            // Hybrid logic: Spawns on audio cues OR ensures a smooth rhythmic flow every 50 frames
-            if ((avgEnergy > 80 && Math.random() > 0.4) || frameCount % 50 === 0) {
-                spawnNote();
-            }
+            if (avgEnergy > 180 && Math.random() > 0.8) spawnNote();
 
-            const hitY = canvas.height - 120;
-            ctx.fillStyle = 'rgba(255, 51, 0, 0.3)';
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+            lanes.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
+
+            const hitY = canvas.height - 100;
+            ctx.fillStyle = 'rgba(255, 85, 0, 0.2)';
             ctx.fillRect(0, hitY - 40, canvas.width, 80);
 
             for (let i = notes.length - 1; i >= 0; i--) {
                 let note = notes[i];
-                note.y += 3.5; 
+                note.y += 6; 
 
-                ctx.fillStyle = '#ffaa00';
+                ctx.fillStyle = '#00ffff';
                 ctx.beginPath(); ctx.arc(note.x, note.y, note.radius, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#ff3300';
-                ctx.beginPath(); ctx.arc(note.x, note.y, note.radius * 0.6, 0, Math.PI * 2); ctx.fill();
 
                 if (note.y > canvas.height) {
                     if (note.active) { misses++; combo = 0; updateHUD(); if (misses >= MAX_MISSES) failGame(); }
@@ -228,12 +255,12 @@
 
         canvas.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
-            const hitY = canvas.height - 120;
+            const hitY = canvas.height - 100;
             let hit = false;
             
             notes.forEach(note => {
                 if (!note.active) return;
-                if (Math.abs(note.y - hitY) < 80 && Math.abs(note.x - touch.clientX) < 80) {
+                if (Math.abs(note.y - hitY) < 60 && Math.abs(note.x - touch.clientX) < 60) {
                     note.active = false;
                     score += 100 + (combo * 10);
                     combo++; hit = true; updateHUD();
@@ -247,6 +274,7 @@
             document.getElementById('score-display').innerText = score;
             document.getElementById('combo-display').innerText = combo;
             document.getElementById('misses-display').innerText = MAX_MISSES - misses;
+            document.getElementById('vibe-display').innerText = Math.max(0, 100 - (misses * 10)) + "%";
         }
 
         function failGame() {
@@ -255,29 +283,55 @@
             endGame();
         }
 
-        function finishGame() {
-            let playerName = document.getElementById('player-name').value || "Anonymous";
-            db.collection("scores").add({
-                player: playerName,
-                score: score,
-                song: currentSongName,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }).then(() => {
-                fetchLeaderboard();
-            }).catch(error => {
-                console.error("Error writing score: ", error);
-            });
-            endGame();
-        }
-
-        function endGame() {
+        async function endGame() {
             isPlaying = false;
             hud.classList.add('hidden');
             uiLayer.classList.remove('hidden');
             mainMenu.classList.remove('hidden');
-            loadingText.classList.remove('hidden');
-            startBtn.classList.add('hidden');
-            fetchLeaderboard();
+            
+            const djName = document.getElementById('player-name').value || "Anonymous DJ";
+            
+            if (score > 0 && currentSongUrl) {
+                try {
+                    await db.collection('library').add({
+                        songName: currentSongName,
+                        url: currentSongUrl,
+                        dj: djName,
+                        score: score,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    alert(`Score saved! Added to Global Library.`);
+                } catch (e) { console.error("Error saving to database", e); }
+            }
+        }
+
+        async function loadLibrary() {
+            mainMenu.classList.add('hidden');
+            libraryView.classList.remove('hidden');
+            const songList = document.getElementById('song-list');
+            songList.innerHTML = "Loading library...";
+
+            try {
+                // Group by song name to show highest scores per track
+                const snapshot = await db.collection('library').orderBy('score', 'desc').limit(20).get();
+                songList.innerHTML = "";
+                
+                if (snapshot.empty) { songList.innerHTML = "No tracks uploaded yet. Be the first!"; return; }
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const div = document.createElement('div');
+                    div.className = 'song-entry';
+                    div.innerHTML = `
+                        <div>
+                            <strong style="color: #ff5500;">${data.songName}</strong><br>
+                            Top Score: ${data.score} (by ${data.dj})
+                        </div>
+                        <button class="play-btn" onclick="playFromLibrary('${data.url}', '${data.songName}')">PLAY</button>
+                    `;
+                    songList.appendChild(div);
+                });
+            } catch (e) { songList.innerHTML = "Error loading library."; }
         }
     </script>
 </body>
