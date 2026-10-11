@@ -1144,7 +1144,7 @@ $('rightsShare').addEventListener('click',async()=>{
     console.error('[cr3] upload failed',e);
     pendingShare=null;pendingBuf=null;
     hideAllPanels();show('menu');
-    const msg=(e&&e.code==='storage/canceled')?'Upload canceled.':'Upload failed ('+((e&&e.message)||e)+'). Playing locally.';
+    const msg=(e&&e.name==='AbortError')?'Upload canceled.':'Upload failed ('+((e&&e.message)||e)+'). Playing locally.';
     setMsg(msg,false);
     await startRun(pb,ps.label,S.level,null);
   }
@@ -1190,10 +1190,7 @@ async function playLibrarySong(hash){
   try{
     const song=await clubCloud.getSong(hash);
     if(!song||song.status!=='active'){setMsg('That song is no longer available.',false);return;}
-    const url=await clubCloud.getDownloadUrl(song.storagePath);
-    const resp=await fetch(url);
-    if(!resp.ok)throw new Error('download HTTP '+resp.status);
-    const ab=await resp.arrayBuffer();
+    const ab=await clubCloud.fetchSongBytes(song.catboxUrl);
     setMsg('Decoding…',true);
     ac();const buf=await decodeAB(ac(),ab);
     clubCloud.bumpPlays(hash).catch(()=>{});
@@ -1285,11 +1282,12 @@ window.addEventListener('pointerdown',()=>{if(AC&&AC.state==='suspended')AC.resu
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,signInAnonymously,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,doc,getDoc,collection,addDoc,query,where,limit,getDocs,runTransaction,serverTimestamp,increment,updateDoc} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
-import {getStorage,ref as sRef,uploadBytesResumable,getDownloadURL} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
 
+
+const CATBOX_WORKER_URL='https://club-rhythm-catbox.YOUR_SUBDOMAIN.workers.dev';
 const firebaseConfig = {apiKey:'AIzaSyBbB1dYoSH9AseXgRJStoaTWUxehQ60cQI',authDomain:'club-rhythm.firebaseapp.com',projectId:'club-rhythm',storageBucket:'club-rhythm.firebasestorage.app',messagingSenderId:'830836262111',appId:'1:830836262111:web:e93708f9f84e6fd21d156a',measurementId:'G-D0Q14RZ1E1'};
 
-const cloud={ready:false,user:null,db:null,storage:null,_task:null};
+const cloud={ready:false,user:null,db:null,_abort:null};
 function setCloudState(txt){const el=document.getElementById('cloudState');if(el)el.textContent=txt;}
 
 async function sha256Hex(buf){
@@ -1300,46 +1298,44 @@ async function getSong(hash){
   const snap=await getDoc(doc(cloud.db,'songs',hash));
   return snap.exists()?Object.assign({id:snap.id},snap.data()):null;
 }
-function cancelUpload(){if(cloud._task){try{cloud._task.cancel();}catch(e){}}}
+function cancelUpload(){if(cloud._abort){try{cloud._abort.abort();}catch(e){}}}
 async function uploadAndRegister(hash,bytes,meta,onProgress){
   if(!cloud.user)throw new Error('not signed in');
   if(!/^[0-9a-f]{64}$/.test(hash))throw new Error('bad hash');
-  const path='songs/'+hash+'.mp3';
-  // 1. Upload bytes (same path for same hash: simultaneous uploads are harmless).
-  const ref=sRef(cloud.storage,path);
-  const task=uploadBytesResumable(ref,bytes,{contentType:'audio/mpeg',customMetadata:{title:String(meta.title||'').slice(0,80)}});
-  cloud._task=task;
+  if(CATBOX_WORKER_URL.indexOf('YOUR_SUBDOMAIN')>=0)throw new Error('catbox proxy not configured');
+  // 1. Upload MP3 bytes to Catbox via the CORS proxy worker.
+  const form=new FormData();
+  form.append('reqtype','fileupload');
+  form.append('fileToUpload',new Blob([bytes],{type:'audio/mpeg'}),hash+'.mp3');
+  if(onProgress)onProgress(5);
+  const ctrl=new AbortController();cloud._abort=ctrl;
+  let catboxUrl;
   try{
-    await new Promise((resolve,reject)=>{
-      task.on('state_changed',
-        s=>{if(onProgress&&s.totalBytes>0)onProgress(Math.round(s.bytesTransferred/s.totalBytes*100));},
-        err=>reject(err),
-        ()=>resolve());
-    });
-  }catch(upErr){
-    // A simultaneous upload of the same song may have created the object
-    // first (create-only rule). Fall through to the transaction, which is
-    // the final arbiter; only fail if the song is truly absent.
-    const probe=await getSong(hash).catch(()=>null);
-    if(!probe)throw upErr;
-  }
-  cloud._task=null;
+    const resp=await fetch(CATBOX_WORKER_URL+'/upload',{method:'POST',body:form,signal:ctrl.signal});
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok||!data.url||data.url.indexOf('https://files.catbox.moe/')!==0)
+      throw new Error(data.error||('upload HTTP '+resp.status));
+    catboxUrl=data.url;
+  }finally{cloud._abort=null;}
+  if(onProgress)onProgress(90);
   // 2. Claim the catalog entry (transaction serializes simultaneous uploads).
-  return runTransaction(cloud.db,async tx=>{
+  const result=await runTransaction(cloud.db,async tx=>{
     const dr=doc(cloud.db,'songs',hash);
     const snap=await tx.get(dr);
-    if(snap.exists())return {exists:true};
+    if(snap.exists())return {exists:true,url:snap.data().catboxUrl};
     tx.set(dr,{
       title:String(meta.title||'Untitled').slice(0,120),
       artist:String(meta.artist||'Unknown').slice(0,80),
       duration:Math.max(0,Math.min(3600,Math.round(meta.duration||0))),
       sizeBytes:Math.max(1,Math.min(15728640,meta.sizeBytes||bytes.length)),
-      storagePath:path,
+      catboxUrl:catboxUrl,
       uploaderUid:cloud.user.uid,
       uploaderName:String(meta.uploaderName||'Anonymous').slice(0,24),
       rightsConfirmed:true,status:'active',playCount:0,createdAt:serverTimestamp()});
-    return {exists:false};
+    return {exists:false,url:catboxUrl};
   });
+  if(onProgress)onProgress(100);
+  return result;
 }
 async function listSongs(){
   const snap=await getDocs(query(collection(cloud.db,'songs'),where('status','==','active'),limit(100)));
@@ -1347,7 +1343,11 @@ async function listSongs(){
   arr.sort((a,b)=>(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0));
   return arr;
 }
-async function getDownloadUrl(path){return getDownloadURL(sRef(cloud.storage,path));}
+async function fetchSongBytes(catboxUrl){
+  if(CATBOX_WORKER_URL.indexOf('YOUR_SUBDOMAIN')>=0)throw new Error('catbox proxy not configured');
+  const resp=await fetch(CATBOX_WORKER_URL+'/fetch?url='+encodeURIComponent(catboxUrl));
+  if(!resp.ok)throw new Error('download HTTP '+resp.status);
+  return resp.arrayBuffer();}
 async function bumpPlays(hash){
   try{await updateDoc(doc(cloud.db,'songs',hash),{playCount:increment(1)});}catch(e){}
 }
@@ -1372,12 +1372,12 @@ async function getScores(songId,difficulty){
   return arr.slice(0,20);
 }
 
-window.clubCloud=Object.assign(cloud,{sha256Hex,getSong,cancelUpload,uploadAndRegister,listSongs,getDownloadUrl,bumpPlays,submitScore,getScores});
+window.clubCloud=Object.assign(cloud,{sha256Hex,getSong,cancelUpload,uploadAndRegister,listSongs,fetchSongBytes,bumpPlays,submitScore,getScores});
 
 try{
   const app=initializeApp(firebaseConfig);
   cloud.db=getFirestore(app);
-  cloud.storage=getStorage(app);
+
   const auth=getAuth(app);
   onAuthStateChanged(auth,u=>{
     cloud.user=u;cloud.ready=!!u;
