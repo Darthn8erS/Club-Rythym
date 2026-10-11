@@ -1,0 +1,224 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Club Rhythm 2.0 — Development Test</title><style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#05020b;color:#fff;font-family:system-ui,Arial,sans-serif;overflow:hidden}canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 22%,#40144ab8,#06020de8 65%);z-index:5;padding:16px}.panel{width:min(500px,100%);text-align:center;background:#0b0719ed;border:1px solid #e94a9c;box-shadow:0 0 45px #c3177b55, inset 0 0 30px #47226455;border-radius:18px;padding:24px}h1{font-size:clamp(38px,9vw,65px);line-height:.95;margin:12px 0;color:#fff;text-shadow:0 3px #fa2677,0 7px #6b2be4,0 0 25px #ff3c9d;letter-spacing:-3px}h2{margin:8px 0 14px}.tag{color:#ffca55;letter-spacing:4px;font-weight:800;font-size:12px}.sub{color:#b7a9cb;font-size:14px;line-height:1.5}button,.filebtn,select{border:1px solid #e758c7;border-radius:10px;background:linear-gradient(135deg,#bd206b,#6120b2);color:white;padding:12px 15px;font-size:15px;font-weight:800;cursor:pointer}button:hover,.filebtn:hover{filter:brightness(1.2)}button:disabled{opacity:.5;cursor:not-allowed}.actions{display:grid;gap:10px;margin:22px auto;max-width:310px}.secondary{background:#211634}.hidden{display:none!important}#hud{position:fixed;z-index:2;top:15px;left:15px;right:15px;display:flex;justify-content:space-between;gap:10px;pointer-events:none}.hudbox{background:#090619bd;border:1px solid #a55df17a;border-radius:12px;padding:9px 14px;min-width:100px;text-shadow:0 0 8px #f47}.hudbox strong{display:block;font-size:24px;color:#ffe46d}.hudbox small{color:#d5c4e5;font-weight:800;letter-spacing:1px}#pause{pointer-events:auto;min-width:auto;padding:8px 12px}.hint{position:fixed;bottom:10px;left:0;right:0;text-align:center;color:#ffffffa8;font-size:12px;z-index:2;pointer-events:none}.row{display:flex;gap:8px;justify-content:center;align-items:center;margin:12px 0;flex-wrap:wrap}select{background:#231533}#song{display:none}.filebtn{display:block;margin:auto;max-width:310px}#msg{min-height:22px;color:#ffcf6b;font-size:13px}#results{margin-top:10px;color:#e7d5fa}#leaderRows{max-height:35vh;overflow:auto;text-align:left}.leader{display:flex;justify-content:space-between;background:#241531;padding:9px;border-radius:7px;margin:5px 0}#touchhelp{font-size:12px;color:#b6a4cb}
+</style></head><body><canvas id="game"></canvas><div id="hud" class="hidden"><div class="hudbox"><small>SCORE</small><strong id="score">0</strong><small id="accuracy">100% ACCURACY</small></div><div class="hudbox" style="text-align:center"><small>COMBO</small><strong id="combo">0</strong><small id="rating">ROCK ON!</small></div><div class="hudbox" style="text-align:right"><small>MULTIPLIER</small><strong id="multi">1×</strong><button id="pause">Ⅱ</button></div></div><div class="hint" id="hint">A S D F G / tap the colored targets · Demo chart is for visual testing</div><div id="overlay"><section class="panel" id="main"><div class="tag">THE STAGE IS YOURS</div><h1>CLUB<br>RHYTHM</h1><div class="tag">GLOBAL ROCK TOUR · 2.0 · TEST</div><p class="sub">A browser-based rock rhythm game prototype.<br>Turn it up. Hit the notes. Own the stage.</p><div class="row"><label for="playerName">PLAYER NAME</label><input id="playerName" maxlength="24" placeholder="ROCKSTAR" style="min-width:0;flex:1;max-width:210px"></div><div class="row"><label for="difficulty">DIFFICULTY</label><select id="difficulty"><option value="low">LOW</option><option value="medium" selected>MEDIUM</option><option value="high">HIGH</option></select></div><div class="row"><label for="timing">NOTE TIMING</label><input id="timing" type="range" min="-200" max="200" value="0" step="10"><span id="timingValue">0 ms</span></div><div class="actions"><button id="demo">⚡ PLAY DEMO</button><label class="filebtn" for="song">♫ PLAY YOUR MP3</label><input id="song" type="file" accept="audio/mpeg,audio/mp3,audio/*"><button class="secondary" id="leaderboard">🏆 LEADERBOARDS</button></div><div id="msg"></div><div class="sub">Uploaded songs use detected musical attacks. Silence gating suppresses false notes during quiet passages. A 3.5-second countdown gives you time to prepare before the music begins. Adjust Note Timing if the notes consistently arrive early or late.</div></section><section class="panel hidden" id="leaders"><div class="tag">HALL OF FAME</div><h2>CLUB LEADERBOARDS</h2><div class="row"><select id="leaderDifficulty"><option value="low">LOW</option><option value="medium" selected>MEDIUM</option><option value="high">HIGH</option></select></div><div id="leaderRows"></div><p class="sub">Development scores stay in this browser. The production leaderboard is not connected.</p><button id="back">← BACK</button></section><section class="panel hidden" id="end"><div class="tag">SHOW COMPLETE</div><h1 style="font-size:48px">ROCK ON!</h1><div id="results"></div><div class="actions"><button id="again">PLAY AGAIN</button><button class="secondary" id="home">MAIN MENU</button></div></section></div><script>
+'use strict';const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');let W=0,H=0,dpr=1;function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();const $=id=>document.getElementById(id);function getPlayerName(){const name=($('playerName')?.value||'').trim().slice(0,24)||'ROCKSTAR';try{localStorage.setItem('clubRhythmDevPlayer',name)}catch(e){}return name}try{$('playerName').value=localStorage.getItem('clubRhythmDevPlayer')||''}catch(e){}const colors=['#34e86b','#ff345f','#fbd33f','#289cff','#ff9b31'];let artwork=null,artworkStatus='Concert lighting',artworkRequest=0;let analyzedChart=null,chartStats='';let state='menu',difficulty='medium',chart=[],nextNote=0,hitCount=0,missCount=0,score=0,combo=0,mult=1,held=[false,false,false,false,false],effects=[],judgement=null,songBuffer=null,source=null,audio=null,startAt=0,pauseAt=0,duration=35,mode='demo',songLabel='Demo Track',raf=0,lastT=0;const approach=2.15,windowHit=.21,leadIn=3.5;let timingOffset=0;const difficulties={low:1.65,medium:1.05,high:.68};function show(id){$('overlay').classList.remove('hidden');for(const x of ['main','leaders','end'])$(x).classList.toggle('hidden',x!==id)}function hide(){ $('overlay').classList.add('hidden') }function hashNoise(n){let x=Math.sin(n*127.1+42)*43758.5453;return x-Math.floor(x)}function generateChart(seconds,level,seed=1){const step=difficulties[level],out=[];let i=0;for(let t=2.5;t<seconds-.4;t+=step){const lane=Math.floor(hashNoise(i*1.71+seed)*5);out.push({time:t,lane,hit:false,miss:false});if(level==='high'&&i%7===0)out.push({time:t,lane:(lane+2)%5,hit:false,miss:false});i++}return out}
+// v0.8: silence-gated audio-driven onset detection. This is rhythmic attack detection,
+// not full instrument transcription. Chart times are tied to the audio clock.
+function analyzeAudio(buffer){
+ const rate=buffer.sampleRate, hop=Math.max(128,Math.round(rate*.0116));
+ const length=buffer.length,channels=buffer.numberOfChannels;
+ const a=buffer.getChannelData(0),b=channels>1?buffer.getChannelData(1):null;
+ // Three bands of transient energy: low, mid, high, using cascaded
+ // one-pole filters. Changes are measured over ~12ms windows.
+ let low=0,mid=0,prevLow=0,prevMid=0;
+ const kLow=1-Math.exp(-2*Math.PI*170/rate),kMid=1-Math.exp(-2*Math.PI*2100/rate);
+ const features=[],levels=[];let sumLow=0,sumMid=0,sumHigh=0,count=0;
+ for(let i=0;i<length;i+=3){
+  const v=b?(a[i]+b[i])*.5:a[i];
+  low+=kLow*(v-low);mid+=kMid*(v-mid);
+  const bass=low,body=mid-low,treble=v-mid;
+  sumLow+=bass*bass;sumMid+=body*body;sumHigh+=treble*treble;count++;
+  if(i%hop<3){
+   features.push([Math.sqrt(sumLow/count),Math.sqrt(sumMid/count),Math.sqrt(sumHigh/count)]);
+   levels.push(Math.sqrt((sumLow+sumMid+sumHigh)/count));
+   sumLow=sumMid=sumHigh=0;count=0;
+  }
+ }
+ const dt=hop/rate,flux=[];
+ // An absolute, song-relative sound floor prevents normalized noise spikes in pauses
+ // from becoming playable notes. A short RMS envelope avoids rejecting quiet strums.
+ const sorted=levels.filter(Number.isFinite).sort((a,b)=>a-b);
+ const percentile=p=>sorted[Math.min(sorted.length-1,Math.floor((sorted.length-1)*p))]||0;
+ const activeFloor=Math.max(.0025,percentile(.85)*.085);
+ const envelope=levels.map((_,i)=>{
+  let peak=0;
+  for(let j=Math.max(0,i-3);j<=Math.min(levels.length-1,i+3);j++)peak=Math.max(peak,levels[j]);
+  return peak;
+ });
+ for(let i=0;i<features.length;i++){
+  let v=0;
+  for(let band=0;band<3;band++){
+   const now=features[i][band],prior=features[Math.max(0,i-2)][band];
+   v+=Math.max(0,now-prior)/(0.003+now+prior)*[1.1,1.4,1.1][band];
+  }
+  flux.push(v);
+ }
+ const events=[];
+ for(let i=6;i<flux.length-6;i++){
+  const t=i*dt;if(t<.18||t>buffer.duration-.22)continue;
+  if(envelope[i]<activeFloor)continue; // genuine near-silence: no notes
+  let mean=0,variance=0,n=0;
+  for(let j=Math.max(0,i-35);j<=Math.min(flux.length-1,i+35);j++){
+   if(Math.abs(j-i)<3)continue;
+   mean+=flux[j];variance+=flux[j]*flux[j];n++;
+  }
+  mean/=n;const sd=Math.sqrt(Math.max(0,variance/n-mean*mean));
+  const threshold=Math.max(.105,mean+sd*.85);
+  if(flux[i]<threshold||flux[i]<flux[i-1]||flux[i]<=flux[i+1])continue;
+  let max=true;for(let j=i-4;j<=i+4;j++)if(j!==i&&flux[j]>flux[i])max=false;
+  if(!max)continue;
+  const strength=(flux[i]-mean)/(sd+.025);
+  if(events.length&&t-events[events.length-1].time<.105){
+   if(strength>events[events.length-1].strength)events[events.length-1]={time:t,strength};
+  }else events.push({time:t,strength});
+ }
+ // Cap extremely dense sections, while retaining real onset timestamps.
+ return events;
+}
+function selectDifficulty(events,level){
+ // Choose the strongest attack in each playable interval rather than the first
+ // transient, preventing weak hi-hat ticks from crowding out prominent beats.
+ const spacing={low:.68,medium:.43,high:.31}[level];
+ const out=[];let cluster=[],last=-99;
+ function flush(){if(!cluster.length)return;
+  cluster.sort((a,b)=>b.strength-a.strength);
+  const e=cluster[0];cluster=[];
+  if(e.time-last<spacing*.88)return;
+  const lane=Math.floor(hashNoise(Math.round(e.time*100)*.23)*5);
+  out.push({time:e.time,lane,hit:false,miss:false});last=e.time;
+ }
+ for(const e of events){
+  if(cluster.length&&e.time-cluster[0].time>=spacing){flush()}
+  cluster.push(e);
+ }
+ flush();return out;
+}
+function layout(){const bottom=Math.min(W*.85,560),top=Math.min(W*.16,104);return{cx:W/2,farY:H*.17,hitY:H*.82,bottom,top}}function position(lane,p){const g=layout(),e=Math.max(0,Math.min(1,p)),depth=Math.pow(e,1.42),width=g.top+(g.bottom-g.top)*depth;return{x:g.cx-width/2+width*(lane+.5)/5,y:g.farY+(g.hitY-g.farY)*depth,w:width/5,depth}}function playTime(){return audio?audio.currentTime-startAt:0}function chartTime(){return playTime()+timingOffset} $('timing').oninput=e=>{timingOffset=Number(e.target.value)/1000;$('timingValue').textContent=e.target.value+' ms'};function updateHud(){ $('score').textContent=score.toLocaleString();$('combo').textContent=combo;$('multi').textContent=mult+'×';$('accuracy').textContent=(hitCount+missCount?Math.round(hitCount/(hitCount+missCount)*100):100)+'% ACCURACY'}async function initAudio(){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error('Web Audio is unavailable in this browser');if(!audio)audio=new AC();if(audio.state==='running')return;await Promise.race([audio.resume(),new Promise((_,reject)=>setTimeout(()=>reject(new Error('Audio startup timed out; try closing other audio apps or reloading Chrome')),3500))]);if(audio.state!=='running')throw new Error('Audio could not start (state: '+audio.state+')')}function stopAudio(){if(source){try{source.stop()}catch(e){}source.disconnect();source=null}}function synthBeat(t){if(!audio||mode!=='demo'||state!=='playing')return;const osc=audio.createOscillator(),gain=audio.createGain();osc.type='triangle';osc.frequency.setValueAtTime(110,t);osc.frequency.exponentialRampToValueAtTime(47,t+.12);gain.gain.setValueAtTime(.14,t);gain.gain.exponentialRampToValueAtTime(.001,t+.18);osc.connect(gain).connect(audio.destination);osc.start(t);osc.stop(t+.19)}let beatIndex=0;function startGame(){stopAudio();difficulty=$('difficulty').value;chart=mode==='upload'&&analyzedChart?selectDifficulty(analyzedChart,difficulty):generateChart(duration,difficulty,1);score=combo=hitCount=missCount=0;mult=1;effects=[];judgement=null;held.fill(false);beatIndex=0;updateHud();$('hud').classList.remove('hidden');hide();$('hint').textContent=mode==='upload'?'Get ready! · MP3 analyzed · '+chart.length+' playable notes':'Get ready! · A S D F G / tap targets';state='playing';startAt=audio.currentTime+leadIn;if(songBuffer){source=audio.createBufferSource();source.buffer=songBuffer;source.connect(audio.destination);source.start(startAt);source.onended=()=>{if(state==='playing'&&playTime()>=duration-.15)finish()}}lastT=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}async function startDemo(){const msg=$('msg');msg.textContent='Starting demo audio…';try{mode='demo';songBuffer=null;analyzedChart=null;duration=35;songLabel='Demo Track';artworkRequest++;artwork=null;artworkStatus='Concert lighting';await initAudio();msg.textContent='';startGame()}catch(err){msg.textContent='Demo could not start: '+(err?.message||String(err));console.error('Club Rhythm demo startup:',err)}}$('demo').onclick=startDemo;$('song').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;$('msg').textContent='Decoding your MP3…';try{await initAudio();const buf=await f.arrayBuffer();songBuffer=await audio.decodeAudioData(buf);duration=songBuffer.duration;mode='upload';songLabel=f.name;artwork=null;artworkStatus='Finding album art…';$('msg').textContent='Analyzing rhythmic attacks…';await new Promise(r=>setTimeout(r,30));analyzedChart=analyzeAudio(songBuffer);chartStats=analyzedChart.length+' musical attacks detected';startGame();resolveArtwork(f).catch(()=>{artworkStatus='Concert lighting'})}catch(err){$('msg').textContent='MP3 could not start: '+(err?.message||String(err));console.error('Club Rhythm MP3 startup:',err)}e.target.value=''};function register(lane){if(state!=='playing'||playTime()<0)return;held[lane]=true;const t=chartTime();let target=null,best=windowHit;for(const n of chart){if(n.lane!==lane||n.hit||n.miss)continue;const dist=Math.abs(n.time-t);if(dist<best){best=dist;target=n}}if(target){target.hit=true;hitCount++;combo++;mult=Math.min(4,1+Math.floor(combo/10));const verdict=best<.045?'PERFECT!':best<.09?'GREAT!':best<.135?'GOOD!':(target.time>t?'EARLY!':'GOOD!');score+=({ 'PERFECT!':150,'GREAT!':125,'GOOD!':100,'EARLY!':75 })[verdict]*mult;const p=position(lane,1);effects.push({x:p.x,y:p.y,t:performance.now(),color:colors[lane]});judgement={text:verdict,t:performance.now(),color:verdict==='PERFECT!'?'#ffe66b':verdict==='GREAT!'?'#5effb7':verdict==='GOOD!'?'#83caff':'#ff9d64'};$('rating').textContent=verdict}else{$('rating').textContent='KEEP ROCKING'}updateHud()}function release(lane){held[lane]=false}const keys={a:0,s:1,d:2,f:3,g:4};addEventListener('keydown',e=>{const lane=keys[e.key.toLowerCase()];if(lane!==undefined&&!e.repeat){e.preventDefault();register(lane)}if(e.key==='Escape'&&state==='playing')pauseGame()});addEventListener('keyup',e=>{const lane=keys[e.key.toLowerCase()];if(lane!==undefined)release(lane)});const touches=new Map();canvas.addEventListener('pointerdown',e=>{if(state!=='playing')return;const g=layout(),x=e.clientX,left=g.cx-g.bottom/2;const lane=Math.floor((x-left)/g.bottom*5);if(lane>=0&&lane<5){touches.set(e.pointerId,lane);register(lane);canvas.setPointerCapture(e.pointerId)}});function releasePointer(e){const lane=touches.get(e.pointerId);if(lane!==undefined){release(lane);touches.delete(e.pointerId)}}canvas.addEventListener('pointerup',releasePointer);canvas.addEventListener('pointercancel',releasePointer);function pauseGame(){if(state!=='playing')return;state='paused';pauseAt=playTime();audio.suspend();$('hud').classList.add('hidden');show('main');$('msg').textContent='Paused. Choose PLAY DEMO or an MP3 to start a new run.'} $('pause').onclick=pauseGame;function finish(){if(state!=='playing')return;state='finished';stopAudio();$('hud').classList.add('hidden');const accuracy=hitCount+missCount?Math.round(100*hitCount/(hitCount+missCount)):100;$('results').innerHTML=`<p style="font-size:24px;color:#ffe077">${score.toLocaleString()} POINTS</p><p>${hitCount} hits · ${missCount} misses · ${accuracy}% accuracy</p><p>${songLabel.replace(/[<>&"]/g,'')}</p>`;const entry={name:getPlayerName(),score,difficulty,song:songLabel,date:new Date().toISOString()};const scores=JSON.parse(localStorage.getItem('clubRhythmDevScores')||'[]');scores.push(entry);try{localStorage.setItem('clubRhythmDevScores',JSON.stringify(scores.sort((a,b)=>b.score-a.score).slice(0,200)))}catch(e){}show('end');window.clubFirebaseSave?.(entry)} $('again').onclick=async()=>{try{await initAudio();startGame()}catch(err){show('main');$('msg').textContent='Could not restart: '+(err?.message||String(err))}};$('home').onclick=()=>{state='menu';show('main')};$('leaderboard').onclick=()=>{renderLeaders();show('leaders');window.clubFirebaseLoad?.()};$('back').onclick=()=>show('main');$('leaderDifficulty').onchange=()=>{renderLeaders();window.clubFirebaseLoad?.()};function renderLeaders(){const level=$('leaderDifficulty').value,rows=JSON.parse(localStorage.getItem('clubRhythmDevScores')||'[]').filter(x=>x.difficulty===level).sort((a,b)=>b.score-a.score);$('leaderRows').innerHTML=rows.length?rows.map((x,i)=>`<div class="leader"><span>${i+1}. ${escapeClub(x.name)} — ${escapeClub(x.song)}</span><strong>${Number(x.score).toLocaleString()}</strong></div>`).join(''):'<p class="sub">No scores yet. Be the first!</p>'}function escapeClub(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+// Album art is optional: first use embedded ID3 APIC, then a free public
+// catalog lookup. Uploaded music remains on the player's device.
+function id3Text(bytes){return new TextDecoder('utf-8',{fatal:false}).decode(bytes).replace(/\0/g,'').trim()}
+function synchsafe(b,o){return ((b[o]&127)<<21)|((b[o+1]&127)<<14)|((b[o+2]&127)<<7)|(b[o+3]&127)}
+async function readId3(file){
+ const b=new Uint8Array(await file.slice(0,Math.min(file.size,2500000)).arrayBuffer());
+ const meta={};if(b.length<10||String.fromCharCode(...b.slice(0,3))!=='ID3')return meta;
+ const ver=b[3],end=Math.min(b.length,10+synchsafe(b,6));let pos=10;
+ while(pos+10<end){const id=String.fromCharCode(...b.slice(pos,pos+4));if(!/^[A-Z0-9]{4}$/.test(id))break;
+ const size=ver===4?synchsafe(b,pos+4):((b[pos+4]<<24)>>>0)+(b[pos+5]<<16)+(b[pos+6]<<8)+b[pos+7];
+ const start=pos+10,stop=start+size;if(!size||stop>end)break;
+ if(['TIT2','TPE1','TALB'].includes(id)){
+  const encoding=b[start],payload=b.slice(start+1,stop);
+  try{meta[id]=new TextDecoder(encoding===1?'utf-16':'utf-8').decode(payload).replace(/\0/g,'').trim()}catch(e){}
+ }
+ if(id==='APIC'&& !meta.picture){let i=start+1;while(i<stop&&b[i]!==0)i++;const mime=id3Text(b.slice(start+1,i));i++;i++;const encoding=b[start];
+  if(encoding===1||encoding===2){while(i+1<stop&&(b[i]!==0||b[i+1]!==0))i+=2;i+=2}else{while(i<stop&&b[i]!==0)i++;i++}
+  if(i<stop&&/^image\/(jpeg|png|webp)$/i.test(mime))meta.picture=new Blob([b.slice(i,stop)],{type:mime});
+ }
+ pos=stop;
+ }return meta;
+}
+function setArtwork(url,request){return new Promise(resolve=>{const im=new Image();im.onload=()=>{if(request===artworkRequest){artwork=im;artworkStatus='Album artwork'}resolve(true)};im.onerror=()=>resolve(false);im.src=url})}
+async function resolveArtwork(file){const request=++artworkRequest;let meta={};try{meta=await readId3(file)}catch(e){}
+ if(request!==artworkRequest)return;
+ if(meta.picture){const url=URL.createObjectURL(meta.picture);const ok=await setArtwork(url,request);URL.revokeObjectURL(url);if(ok)return}
+ // iTunes Search API: no API key. Search only the song's metadata/name;
+ // never crawl arbitrary websites or upload the audio.
+ const name=file.name.replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').replace(/^\d+\s*[-.]\s*/,''),term=[meta.TPE1,meta.TIT2||name].filter(Boolean).join(' ');
+ try{const response=await fetch('https://itunes.apple.com/search?entity=song&limit=5&term='+encodeURIComponent(term));if(!response.ok)throw Error('lookup failed');
+  const data=await response.json();if(request!==artworkRequest)return;
+  const match=data.results?.find(x=>x.artworkUrl100 && (!meta.TPE1 || x.artistName?.toLowerCase().includes(meta.TPE1.toLowerCase()))) || data.results?.find(x=>x.artworkUrl100);if(match){const url=match.artworkUrl100.replace(/100x100bb/g,'600x600bb');if(await setArtwork(url,request))return}
+ }catch(e){}if(request===artworkRequest)artworkStatus='Concert lighting (no matching album art)';
+}
+function background(t){const grd=ctx.createLinearGradient(0,0,0,H);grd.addColorStop(0,'#14091f');grd.addColorStop(.6,'#19091c');grd.addColorStop(1,'#05040d');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);if(artwork){ctx.save();const scale=Math.max(W/artwork.width,H/artwork.height),dw=artwork.width*scale,dh=artwork.height*scale;ctx.globalAlpha=.78;ctx.filter='blur(4px) saturate(1.35)';ctx.drawImage(artwork,(W-dw)/2,(H-dh)/2,dw,dh);ctx.filter='none';ctx.globalAlpha=1;ctx.fillStyle='#08041470';ctx.fillRect(0,0,W,H);ctx.restore()}const cx=W/2;for(let i=0;i<8;i++){const x=W*(i+.5)/8+Math.sin(t*.0003+i)*22;ctx.save();ctx.globalAlpha=.10+.045*Math.sin(t*.001+i);ctx.fillStyle=i%2?'#fd35a4':'#8442ff';ctx.beginPath();ctx.moveTo(x,-15);ctx.lineTo(x-85,H*.83);ctx.lineTo(x+110,H*.83);ctx.fill();ctx.restore()}for(let i=0;i<40;i++){const x=(i*97.3)%W,y=H*.27+Math.sin(i*4.7+t*.001)*H*.09;ctx.fillStyle=`rgba(255,${60+i%3*50},185,${.06+.04*Math.sin(t*.003+i)})`;ctx.fillRect(x,y,3,3)}ctx.fillStyle='#09050e';ctx.beginPath();ctx.moveTo(0,H*.72);for(let x=0;x<=W;x+=15)ctx.lineTo(x,H*.72+Math.sin(x*.034+t*.001)*14);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.fill()}function highway(t){
+ const g=layout(),{cx,farY,hitY,bottom,top}=g;
+ const backY=hitY+55, backWidth=bottom+(bottom-top)*55/(hitY-farY);
+ // One continuous tapered playing surface; all details lie in its perspective plane.
+ ctx.save();
+ ctx.shadowColor='#a34bff';ctx.shadowBlur=35;
+ ctx.fillStyle='#0a0811';ctx.beginPath();
+ ctx.moveTo(cx-top/2,farY);ctx.lineTo(cx+top/2,farY);
+ ctx.lineTo(cx+backWidth/2,backY);ctx.lineTo(cx-backWidth/2,backY);
+ ctx.closePath();ctx.fill();ctx.restore();
+ for(let i=0;i<5;i++){
+  const a=cx-top/2+i*top/5,b=cx-backWidth/2+i*backWidth/5;
+  ctx.fillStyle=i%2?'#241a31':'#181321';
+  ctx.beginPath();ctx.moveTo(a,farY);ctx.lineTo(a+top/5,farY);
+  ctx.lineTo(b+backWidth/5,backY);ctx.lineTo(b,backY);ctx.closePath();ctx.fill();
+ }
+ // Inlaid metallic rails, edges and fret markers.
+ for(let i=0;i<=5;i++){
+  const a=cx-top/2+i*top/5,b=cx-backWidth/2+i*backWidth/5;
+  ctx.strokeStyle=i===0||i===5?'#b887db':'#65536f';
+  ctx.lineWidth=i===0||i===5?3:1.2;
+  ctx.beginPath();ctx.moveTo(a,farY);ctx.lineTo(b,backY);ctx.stroke();
+ }
+ for(let i=0;i<13;i++){
+  const phase=(i/13+t*.22)%1,depth=phase*phase;
+  const y=farY+(hitY-farY)*depth,w=top+(bottom-top)*depth;
+  ctx.strokeStyle=`rgba(203,173,226,${.07+.18*depth})`;
+  ctx.lineWidth=1+depth;
+  ctx.beginPath();ctx.moveTo(cx-w/2,y);ctx.lineTo(cx+w/2,y);ctx.stroke();
+ }
+ // Flush-mounted five-segment strike assembly. It follows the highway plane,
+ // rather than using tall, upright-looking keys.
+ const near=position(0,.965),near2=position(0,1.035);
+ const y0=near.y,y1=near2.y;
+ const w0=top+(bottom-top)*Math.pow(.965,1.42);
+ const w1=top+(bottom-top)*Math.pow(1.035,1.42);
+ ctx.save();ctx.shadowColor='#f0b9ff';ctx.shadowBlur=17;
+ ctx.fillStyle='#44324f';
+ ctx.beginPath();ctx.moveTo(cx-w0/2,y0);ctx.lineTo(cx+w0/2,y0);
+ ctx.lineTo(cx+w1/2,y1);ctx.lineTo(cx-w1/2,y1);ctx.closePath();ctx.fill();
+ ctx.restore();
+ for(let i=0;i<5;i++){
+  const x0=cx-w0/2+i*w0/5,x1=cx-w1/2+i*w1/5;
+  ctx.save();
+  ctx.shadowColor=colors[i];ctx.shadowBlur=held[i]?27:9;
+  ctx.fillStyle=held[i]?colors[i]:`${colors[i]}9c`;
+  roundedFret(x0+2,x0+w0/5-2,x1+3,x1+w1/5-3,y0+2,y1-2,6);ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle=held[i]?'#ffffff':'#c7b8d5';ctx.lineWidth=held[i]?2.6:1;
+  roundedFret(x0+2,x0+w0/5-2,x1+3,x1+w1/5-3,y0+2,y1-2,6);ctx.stroke();
+  ctx.fillStyle=held[i]?'#09070c':'#f7f0ff';
+  ctx.font=`bold ${Math.max(10,Math.min(14,bottom/38))}px system-ui`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('ASDFG'[i],cx-w1/2+(i+.5)*w1/5,(y0+y1)/2+1);
+ }
+ ctx.save();ctx.shadowColor='#fff2ff';ctx.shadowBlur=17;
+ ctx.strokeStyle='#ffe3ff';ctx.lineWidth=3;
+ ctx.beginPath();ctx.moveTo(cx-w0/2,y0);ctx.lineTo(cx+w0/2,y0);ctx.stroke();
+ ctx.restore();
+ // Rigid side frame, with a front crossbeam for visual weight.
+ ctx.strokeStyle='#9e7ab6';ctx.lineWidth=5;
+ ctx.beginPath();ctx.moveTo(cx-top/2,farY);ctx.lineTo(cx-backWidth/2,backY);
+ ctx.moveTo(cx+top/2,farY);ctx.lineTo(cx+backWidth/2,backY);ctx.stroke();
+ ctx.strokeStyle='#4a354f';ctx.lineWidth=8;
+ ctx.beginPath();ctx.moveTo(cx-backWidth/2,backY+2);ctx.lineTo(cx+backWidth/2,backY+2);ctx.stroke();
+}
+function roundedFret(tl,tr,bl,br,topY,bottomY,r){
+ const radius=Math.max(1,Math.min(r,(tr-tl)/3,(br-bl)/3,(bottomY-topY)/2.5));
+ ctx.beginPath();ctx.moveTo(tl+radius,topY);ctx.lineTo(tr-radius,topY);
+ ctx.quadraticCurveTo(tr,topY,tr+(br-tr)*radius/(bottomY-topY),topY+radius);
+ ctx.lineTo(br-(br-tr)*radius/(bottomY-topY),bottomY-radius);
+ ctx.quadraticCurveTo(br,bottomY,br-radius,bottomY);
+ ctx.lineTo(bl+radius,bottomY);
+ ctx.quadraticCurveTo(bl,bottomY,bl+(tl-bl)*radius/(bottomY-topY),bottomY-radius);
+ ctx.lineTo(tl-(tl-bl)*radius/(bottomY-topY),topY+radius);
+ ctx.quadraticCurveTo(tl,topY,tl+radius,topY);ctx.closePath();
+}
+function renderNotes(t){
+ for(const n of chart){
+  if(n.hit||n.miss)continue;
+  const p=(t-n.time+approach)/approach;
+  if(p<0||p>1.13)continue;
+  // Draw each note as a foreshortened, rounded trapezoid ON the highway.
+  // The front and back edges use different highway widths, so it lies flat.
+  const g=layout(),depth=Math.pow(Math.max(0,Math.min(1.12,p)),1.42);
+  const depthSpan=.024,front=Math.max(0,depth-depthSpan),rear=Math.min(1.2,depth+depthSpan);
+  const y0=g.farY+(g.hitY-g.farY)*front,y1=g.farY+(g.hitY-g.farY)*rear;
+  const w0=g.top+(g.bottom-g.top)*front,w1=g.top+(g.bottom-g.top)*rear;
+  const a0=g.cx-w0/2+(n.lane+.13)*w0/5,b0=g.cx-w0/2+(n.lane+.87)*w0/5;
+  const a1=g.cx-w1/2+(n.lane+.13)*w1/5,b1=g.cx-w1/2+(n.lane+.87)*w1/5;
+  ctx.save();ctx.shadowColor=colors[n.lane];ctx.shadowBlur=9+depth*14;
+  ctx.fillStyle=colors[n.lane];roundedFret(a0,b0,a1,b1,y0,y1,4+depth*6);ctx.fill();
+  ctx.shadowBlur=0;ctx.strokeStyle='#fff9';ctx.lineWidth=1+depth*1.3;ctx.stroke();
+  // Small upper-face glint reinforces a solid, recessed arcade-gem appearance.
+  ctx.strokeStyle='#ffffff80';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(a0+Math.min(8,(b0-a0)*.18),y0+2);ctx.lineTo(b0-Math.min(8,(b0-a0)*.18),y0+2);ctx.stroke();
+  ctx.restore();
+ }
+}
+function drawEffects(now){effects=effects.filter(e=>now-e.t<370);for(const e of effects){const p=(now-e.t)/370;ctx.save();ctx.globalAlpha=1-p;ctx.strokeStyle=e.color;ctx.shadowColor=e.color;ctx.shadowBlur=22;ctx.lineWidth=5*(1-p);ctx.beginPath();ctx.strokeRect(e.x-(20+p*50),e.y-(13+p*23),(20+p*50)*2,(13+p*23)*2);ctx.restore()}}function drawJudgement(now){if(!judgement)return;const age=now-judgement.t;if(age>620){judgement=null;return}const fade=Math.min(1,(620-age)/200);const g=layout();ctx.save();ctx.globalAlpha=fade;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.round(28+12*Math.exp(-age/130))}px system-ui`;ctx.shadowColor=judgement.color;ctx.shadowBlur=25;ctx.fillStyle=judgement.color;ctx.fillText(judgement.text,g.cx,g.hitY-95-age*.035);ctx.restore()}function draw(now){const t=state==='playing'?chartTime():now*.0005;background(now);highway(t);if(state==='playing'){renderNotes(t);drawEffects(now);drawJudgement(now);if(playTime()<0){const remaining=-playTime();const word=remaining>3?'READY':remaining>2?'3':remaining>1?'2':remaining>.15?'1':'GO!';ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.min(74,W*.18)}px system-ui`;ctx.fillStyle='#fff';ctx.shadowColor='#ff3c9d';ctx.shadowBlur=28;ctx.fillText(word,W/2,H*.38);ctx.restore()}}if(state==='playing'&&mode==='upload'){ctx.save();ctx.font='11px system-ui';ctx.textAlign='left';ctx.fillStyle='#ffffffaa';ctx.fillText(artworkStatus,12,H-14);ctx.restore()}if(state!=='playing'){ctx.fillStyle='#ffffff16';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText('FIVE-LANE ROCK HIGHWAY',W/2,H*.11)}}function loop(now){if(state!=='playing')return;const t=chartTime();if(mode==='demo'&&audio){while(beatIndex*.5<t+.09&&beatIndex*.5<duration){synthBeat(startAt+beatIndex*.5);beatIndex++}}for(const n of chart){if(!n.hit&&!n.miss&&t-n.time>windowHit){n.miss=true;missCount++;combo=0;mult=1;updateHud()}}draw(now);if(playTime()>=duration){finish();return}raf=requestAnimationFrame(loop)}function ambient(now){if(state!=='playing')draw(now);requestAnimationFrame(ambient)}requestAnimationFrame(ambient);
+</script>
+<!-- Development isolation: Firebase is intentionally disconnected. Production index.html is unchanged. -->
+</body></html>
