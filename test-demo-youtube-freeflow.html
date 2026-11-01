@@ -61,6 +61,10 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
 #msg{min-height:22px;color:#ffcaca;font-size:13px}
 #msg.ok{color:#9df0b5}
 #ytModalMsg{min-height:22px;color:#ffcaca;font-size:13px}
+#ytAlignStatus{min-height:22px;color:#9df0b5;font-size:13px}
+#ytbg.preview-fg{z-index:30}
+#alignPreview{position:fixed;inset:0;z-index:40;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-end;padding:16px;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+#alignPreview .alignBar{pointer-events:auto;background:rgba(11,7,25,.92);border:1px solid rgba(233,72,155,.4);border-radius:18px;padding:16px;text-align:center}
 .lbrow{display:flex;justify-content:space-between;background:#241531;padding:9px 12px;border-radius:8px;margin:5px 0;font-size:14px}
 .hidden{display:none!important}
 #calTap.hit{background:#ff3c9d;transform:scale(.96);}
@@ -130,9 +134,22 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
     <div class="row"><label for="linkBpm">LINK-ONLY BPM</label><span class="tval" id="linkBpmVal">120</span></div>
     <div class="row"><input id="linkBpm" type="range" min="60" max="200" step="1" value="120"></div>
     <button class="btn" id="linkOnlyBtn">PLAY</button>
+    <button class="btn secondary" id="alignBeatBtn">ALIGN FIRST BEAT</button>
+    <button class="btn secondary hidden" id="clearAlignBtn">CLEAR ALIGNMENT</button>
+    <div id="ytAlignStatus" style="min-height:22px;color:#9df0b5;font-size:13px"></div>
     <div id="ytModalMsg" style="min-height:22px;color:#ffcaca;font-size:13px"></div>
     <p class="sub">Video + sound come from YouTube. Notes follow the video clock on a beat grid at your BPM.</p>
     <button class="btn secondary" id="ytBackBtn">BACK</button>
+  </div>
+</div>
+
+<div id="alignPreview" class="hidden">
+  <div class="alignBar">
+    <p class="sub" style="margin:0 0 8px">Video playing. Tap when you hear the first downbeat. Tap again to correct a tap made during an ad.</p>
+    <button class="btn" id="alignTapBtn" style="min-height:80px;font-size:22px">TAP ON FIRST BEAT</button>
+    <div id="alignLastTap" class="sub" style="margin:8px 0">No tap yet.</div>
+    <div id="alignPreviewMsg" style="min-height:22px;color:#ffcaca;font-size:13px"></div>
+    <div style="display:flex;gap:8px"><button class="btn" id="alignSaveBtn" style="flex:1">SAVE</button><button class="btn secondary" id="alignCancelBtn" style="flex:1">CANCEL</button></div>
   </div>
 </div>
 
@@ -784,7 +801,7 @@ function accuracy(){
 
 function show(id){$(id).classList.remove('hidden');}
 function hide(id){$(id).classList.add('hidden');}
-function hideAllPanels(){['menu','results','boards','paused','calib','demoModal','ytModal'].forEach(hide);}
+function hideAllPanels(){['menu','results','boards','paused','calib','demoModal','ytModal','alignPreview'].forEach(hide);}
 
 function setMsg(t,ok){const m=$('msg');m.textContent=t;m.className=ok?'ok':'';}
 
@@ -829,6 +846,10 @@ function ytMaybeCreate(){
 function ytOnReady(e){
   ytReady=true;
   if(ytWatchdog){ clearTimeout(ytWatchdog); ytWatchdog=0; }
+  if(alignPreviewActive){
+    try{ e.target.unMute(); e.target.setVolume(100); e.target.seekTo(0,true); e.target.playVideo(); }catch(err){}
+    return;
+  }
   if(S.mode==='linkonly'){
     try{ e.target.unMute(); e.target.setVolume(100); }catch(err){}
     if(S.ytActive&&S.state==='playing'){
@@ -859,6 +880,7 @@ function ytLinkPlay(){
 }
 function ytOnError(){ ytFallback('player error (embedding may be disabled)'); }
 function ytFallback(reason){
+  if(alignPreviewActive){ alignEndWithError(reason); return; }
   if(S.mode==='linkonly'&&S.state==='playing'){
     // Link-only has no vinyl fallback: the video IS the music, so a failed
     // player ends the run back to the menu instead of playing notes over vinyl.
@@ -956,19 +978,158 @@ function ytStartRun(when){
    PLAY AGAIN on the results screen restarts the same saved link ID.
    endRun() deliberately keeps S.mode='linkonly' through the results
    screen so PLAY AGAIN can restart it; home/quit clear S.mode. */
-function buildLinkOnlyChart(bpm,level,duration){
-  const interval=60/bpm, pat=[0,1,2,3,4,3,2,1], times=[];
+/* ---------------- YouTube beat alignment (link-only only) ----------------
+   Preview is NOT a run: no ad-guard restart, no chart, no scoring. The
+   video plays via the official player, unmuted, ads first. Last tap wins,
+   so a tap made during an ad can be corrected by tapping again once the
+   song starts. Offset is an absolute time shift (first beat = tap time),
+   so changing BPM after aligning does not invalidate it. Saved per video
+   ID in localStorage as cr_align_<videoId> (seconds, 3 decimals). */
+let alignPreviewActive=false, alignLastTap=null, alignPreviewId=null, alignWatchdog=0;
+function alignKey(id){ return 'cr_align_'+id; }
+function getSavedAlign(id){
+  if(!id) return null;
+  try{ const v=localStorage.getItem(alignKey(id)); if(v===null) return null; const n=parseFloat(v); return isFinite(n)?n:null; }catch(e){ return null; }
+}
+function setAlignStatus(t){ const el=$('ytAlignStatus'); if(el) el.textContent=t||''; }
+function refreshAlignUI(){
+  const id=parseYtId($('ytlink').value||'');
+  const off=id?getSavedAlign(id):null;
+  const clr=$('clearAlignBtn'); if(clr) clr.classList.toggle('hidden', off===null);
+  if(off===null){ setAlignStatus(''); }
+  else { setAlignStatus('Saved alignment: first beat at '+(0.5+off).toFixed(2)+'s, PLAY will use it.'); }
+}
+function alignClearSaved(){
+  const id=parseYtId($('ytlink').value||'');
+  if(id){ try{ localStorage.removeItem(alignKey(id)); }catch(e){} }
+  const clr=$('clearAlignBtn'); if(clr) clr.classList.add('hidden');
+  setAlignStatus('Alignment cleared, back to default.');
+}
+function alignEndPreview(){
+  alignPreviewActive=false; alignLastTap=null; alignPreviewId=null;
+  if(alignWatchdog){ clearTimeout(alignWatchdog); alignWatchdog=0; }
+  const bg=$('ytbg'); if(bg) bg.classList.remove('preview-fg');
+  ytStop();
+  hideAllPanels(); show('ytModal');
+}
+function alignEndWithError(reason){
+  const r=reason||'unknown';
+  alignPreviewActive=false; alignLastTap=null; alignPreviewId=null;
+  if(alignWatchdog){ clearTimeout(alignWatchdog); alignWatchdog=0; }
+  const bg=$('ytbg'); if(bg) bg.classList.remove('preview-fg');
+  ytStop();
+  hideAllPanels(); show('ytModal');
+  const mm=$('ytModalMsg'); if(mm) mm.textContent='That video could not play here ('+r+'). Try a different link.';
+  refreshAlignUI();
+}
+function alignStartPreview(){
+  const id=parseYtId($('ytlink').value||'');
+  if(!id){ const mm=$('ytModalMsg'); if(mm) mm.textContent='Paste a YouTube link first'; return; }
+  const mm=$('ytModalMsg'); if(mm) mm.textContent='';
+  setAlignStatus('');
+  alignPreviewActive=true; alignLastTap=null; alignPreviewId=id;
+  const lt=$('alignLastTap'); if(lt) lt.textContent='No tap yet.';
+  const pm=$('alignPreviewMsg'); if(pm) pm.textContent='';
+  ytStop();
+  S.ytId=id; S.ytActive=true;
+  hideAllPanels(); show('alignPreview');
+  show('ytbg'); hide('bgstatus');
+  const bg=$('ytbg'); if(bg) bg.classList.add('preview-fg');
+  ytEnsureApi();
+  ytMaybeCreate();
+  if(ytPlayer&&ytReady){
+    try{ ytPlayer.unMute(); ytPlayer.setVolume(100); ytPlayer.loadVideoById(id); ytPlayer.unMute(); ytPlayer.setVolume(100); }catch(e){}
+  } else if(ytPlayer){
+    try{ ytPlayer.cueVideoById(id); }catch(e){}
+    /* ytOnReady (preview branch) will unmute, seek to 0, and play. */
+  }
+  if(alignWatchdog){ clearTimeout(alignWatchdog); alignWatchdog=0; }
+  /* 60s, ready-only: a long unskippable ad must not false-timeout the
+     preview, and a player that never becomes ready still errors out. A
+     ready-but-stalled player is left to the user to CANCEL. */
+  alignWatchdog=setTimeout(()=>{
+    alignWatchdog=0;
+    if(alignPreviewActive&&!ytReady) alignEndWithError('load timeout');
+  },60000);
+}
+function alignRecordTap(){
+  if(!alignPreviewActive) return;
+  const t=ytTime();
+  alignLastTap=t;
+  const lt=$('alignLastTap'); if(lt) lt.textContent='Last tap at '+t.toFixed(2)+'s';
+  const pm=$('alignPreviewMsg'); if(pm) pm.textContent='';
+}
+function alignSavePreview(){
+  if(!alignPreviewActive) return;
+  if(alignLastTap===null||!isFinite(alignLastTap)){
+    const pm=$('alignPreviewMsg'); if(pm) pm.textContent='Tap on the first beat first.';
+    return;
+  }
+  const id=alignPreviewId;
+  const offset=alignLastTap-0.5;
+  if(id){ try{ localStorage.setItem(alignKey(id), offset.toFixed(3)); }catch(e){} }
+  const tap=alignLastTap;
+  alignEndPreview();
+  const clr=$('clearAlignBtn'); if(clr) clr.classList.remove('hidden');
+  setAlignStatus('Aligned: first beat at '+tap.toFixed(2)+'s');
+}
+function alignCancelPreview(){
+  /* Discards an unsaved tap only; a previously saved alignment is kept. */
+  alignEndPreview();
+  refreshAlignUI();
+}
+/* ---------------- Link-only musical lane motifs ----------------
+   Hand-designed 4-beat motifs, one per bar. Within-bar jumps are at most
+   2 lanes (MEDIUM) by construction; bar-to-bar (downbeat) jumps may be
+   wide, which is the only place wide jumps are allowed. Every 4th bar
+   (bar % 4 === 3) is a variation: beat 2 repeated on beat 3, a same-lane
+   repeat on a strong beat. No simultaneous chords: the chart stays
+   single-lane so judging and scoring are unchanged. Selection is seeded
+   by video ID + BPM + difficulty (no unseeded Math.random), so the same
+   song with the same settings gives the same chart every play. */
+const LINK_MOTIFS=[
+  [0,2,4,2],
+  [4,2,0,1],
+  [1,3,4,3],
+  [2,0,1,3],
+  [3,1,0,2],
+  [2,4,3,1],
+  [0,1,3,2],
+  [4,3,1,0]
+];
+function linkSeed(str){
+  let h=2166136261;
+  for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); }
+  return h>>>0;
+}
+function linkMotifIndex(seed,bar){
+  let x=(seed+Math.imul(bar,0x9E3779B9))>>>0;
+  x^=x>>>16; x=Math.imul(x,2246822507); x^=x>>>13; x=Math.imul(x,3266489909); x^=x>>>16;
+  return (x>>>0)%LINK_MOTIFS.length;
+}
+function buildLinkOnlyChart(bpm,level,duration,offset,videoId){
+  const interval=60/bpm;
+  const off=isFinite(offset)?offset:0;
   const dur=Math.min(Math.max(duration||300,1),600);
+  const baseTime=0.5+off;
+  const seed=linkSeed((videoId||'noid')+'|'+bpm+'|'+level);
+  function laneForBeat(beatIdx){
+    const bar=Math.floor(beatIdx/4), pos=((beatIdx%4)+4)%4;
+    const base=LINK_MOTIFS[linkMotifIndex(seed,bar)];
+    if(bar%4===3) return [base[0],base[1],base[2],base[2]][pos];
+    return base[pos];
+  }
+  const notes=[];
   if(level==='low'){
-    for(let b=0;;b+=2){ const t=0.5+b*interval; if(t>dur) break; times.push(t); }
+    for(let b=0;;b+=2){ const t=baseTime+b*interval; if(t>dur) break; notes.push({time:t,lane:laneForBeat(b),hit:false,miss:false}); }
   } else {
-    for(let b=0;;b++){ const t=0.5+b*interval; if(t>dur) break; times.push(t); }
+    for(let b=0;;b++){ const t=baseTime+b*interval; if(t>dur) break; notes.push({time:t,lane:laneForBeat(b),hit:false,miss:false}); }
     if(level==='high'){
-      for(let k=0;;k++){ const t=0.5+(4*k+2.5)*interval; if(t>dur) break; times.push(t); }
+      for(let k=0;;k++){ const t=baseTime+(4*k+2.5)*interval; if(t>dur) break; const l2=laneForBeat(4*k+2); const ol=l2<4?l2+1:l2-1; notes.push({time:t,lane:ol,hit:false,miss:false}); }
     }
   }
-  times.sort((a,b)=>a-b);
-  return times.map((t,i)=>({time:t,lane:pat[i%pat.length],hit:false,miss:false}));
+  notes.sort((a,b)=>a.time-b.time);
+  return notes;
 }
 function startLinkOnly(){
   const inp=$('ytlink');
@@ -983,7 +1144,7 @@ function startLinkOnlyRun(id,bpm){
   let dur=300;
   try{ if(ytPlayer&&typeof ytPlayer.getDuration==='function'){ const d=ytPlayer.getDuration(); if(isFinite(d)&&d>0) dur=d; } }catch(e){}
   const linkDuration=Math.min(dur,600);
-  const chart=buildLinkOnlyChart(bpm,S.level,linkDuration);
+  const linkOffset=getSavedAlign(id)||0; S.linkOffset=linkOffset; const chart=buildLinkOnlyChart(bpm,S.level,linkDuration,linkOffset,id);
   if(!chart.length){ const mm=$('ytModalMsg'); if(mm) mm.textContent='Could not build a chart for that link.'; setMsg('Could not build a chart for that link.',false); return; }
   cancelAnimationFrame(S.raf);
   stopAudio();
@@ -1185,7 +1346,7 @@ function frame(){
     const nowT=ytTime();
     if(S.lastYtTime>3&&S.lastYtTime-nowT>3&&(performance.now()-S.linkRunStartedAt)/1000<30){
       S.score=0;S.combo=0;S.maxCombo=0;S.hits=0;S.misses=0;S.judged=[];S.effects=[];S.flash=[0,0,0,0,0];
-      S.chart=buildLinkOnlyChart(S.linkBpm,S.level,S.linkDuration);
+      S.chart=buildLinkOnlyChart(S.linkBpm,S.level,S.linkDuration,S.linkOffset||0,S.linkYtId);
       S.lastYtTime=0; S.linkRunStartedAt=performance.now();
       try{ ytPlayer.seekTo(0,true); ytPlayer.playVideo(); }catch(e){}
     } else {
@@ -1451,11 +1612,17 @@ async function startDemoSong(bpm,roots,mel,beats,label,songId){
 $('demoSong1Btn').addEventListener('click',()=>startDemoSong(120,DEMO_ROOTS,DEMO_MEL,60,'Demo 1 - Rock Groove',1));
 $('demoSong2Btn').addEventListener('click',()=>startDemoSong(140,DEMO2_ROOTS,DEMO2_MEL,70,'Demo 2 - Fast Drive',2));
 $('demoSong3Btn').addEventListener('click',()=>startDemoSong(100,DEMO3_ROOTS,DEMO3_MEL,50,'Demo 3 - Slow Burn',3));
-$('ytMenuBtn').addEventListener('click',()=>{hideAllPanels();show('ytModal');const mm=$('ytModalMsg');if(mm)mm.textContent='';});
+$('ytMenuBtn').addEventListener('click',()=>{hideAllPanels();show('ytModal');const mm=$('ytModalMsg');if(mm)mm.textContent='';refreshAlignUI();});
 $('ytBackBtn').addEventListener('click',()=>{hideAllPanels();show('menu');});
 $('freeFlowBtn').addEventListener('click',()=>$('file').click());   // real button -> input.click(): works on mobile
 $('linkBpm').addEventListener('input',e=>{ $('linkBpmVal').textContent=e.target.value; });
 $('linkOnlyBtn').addEventListener('click',startLinkOnly);
+$('ytlink').addEventListener('input',refreshAlignUI);
+$('alignBeatBtn').addEventListener('click',alignStartPreview);
+$('clearAlignBtn').addEventListener('click',alignClearSaved);
+$('alignTapBtn').addEventListener('click',alignRecordTap);
+$('alignSaveBtn').addEventListener('click',alignSavePreview);
+$('alignCancelBtn').addEventListener('click',alignCancelPreview);
 // decodeAudioData: callback form for older iOS Safari, promise form elsewhere.
 function decodeAB(ctx,ab){
   return new Promise((resolve,reject)=>{
