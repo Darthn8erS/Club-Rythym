@@ -53,7 +53,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
   text-shadow:0 0 30px #ff3c9d,0 6px #6b2be4}
 #rating{position:fixed;left:0;right:0;top:34%;z-index:11;text-align:center;pointer-events:none;
   font-size:clamp(30px,8vw,52px);font-weight:900;letter-spacing:2px;opacity:0}
-#songlabel{position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:0;right:0;z-index:10;
+#songlabel{display:none!important;position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:0;right:0;z-index:10;
   text-align:center;color:rgba(255,255,255,.65);font-size:12px;pointer-events:none;letter-spacing:1px}
 #bgstatus{position:fixed;top:calc(64px + env(safe-area-inset-top));left:0;right:0;z-index:12;
   text-align:center;color:#ffe46d;font-size:13px;font-weight:700;letter-spacing:1px;pointer-events:none;
@@ -838,7 +838,7 @@ function ytMaybeCreate(){
   try{
     ytPlayer=new YT.Player('ytplayer',{
       videoId:S.ytId,
-      playerVars:{controls:0,modestbranding:1,rel:0,playsinline:1,fs:0,disablekb:1,iv_load_policy:3},
+      playerVars:{controls:0,modestbranding:1,rel:0,playsinline:1,fs:0,disablekb:1,iv_load_policy:3,cc_load_policy:0},
       events:{onReady:ytOnReady,onError:ytOnError,onStateChange:ytOnStateChange}
     });
   }catch(e){ ytFallback('player error'); }
