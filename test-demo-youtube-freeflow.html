@@ -1227,18 +1227,20 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 function mult(){const c=S.combo;return c>=30?4:c>=20?3:c>=10?2:1;}
 
 function judge(dt){
-  const a=Math.abs(dt);let txt,pts,q;
+  const a=Math.abs(dt);let txt,pts,q,kind='hit';
   if(a<CFG.perfect){txt='PERFECT!';pts=CFG.pts.perfect;q=1;}
   else if(a<CFG.great){txt='GREAT!';pts=CFG.pts.great;q=0.83;}
   else if(a<CFG.good){txt='GOOD!';pts=CFG.pts.good;q=0.67;}
-  else if(dt<0){txt='EARLY';pts=a>CFG.hitWindow?50:CFG.pts.early;q=a>CFG.hitWindow?0.35:0.5;}
-  else{txt='GOOD!';pts=CFG.pts.good;q=0.67;}   // late edge keeps original feel
+  else if(dt<0){txt='EARLY';pts=a>CFG.hitWindow?50:CFG.pts.early;q=a>CFG.hitWindow?0.35:0.5;kind='early';}
+  else{txt='LATE';pts=CFG.pts.good;q=0.67;kind='late';}   // late edge: same points/combo as GOOD, now labeled + burst
   S.hits++; S.combo++; S.maxCombo=Math.max(S.maxCombo,S.combo);
   S.judged.push(q); S.score+=pts*mult();
-  showRating(txt,pts>=125?'#ffe46d':pts>=100?'#7dffb0':'#ffb04d');
+  showRating(txt,kind==='late'?'#ff5d7a':pts>=125?'#ffe46d':pts>=100?'#7dffb0':'#ffb04d');
+  return kind;
 }
-function onMiss(){
+function onMiss(lane){
   S.misses++; S.combo=0; S.judged.push(0);
+  if(typeof lane==='number') S.effects.push({lane,life:1,kind:'miss'});
   showRating('MISS','#ff5d7a');
 }
 function showRating(txt,col){
@@ -1279,7 +1281,7 @@ function lanePress(lane){
     const ok=dt>=0?d<=CFG.hitWindow:d<=CFG.earlyWindow;
     if(ok&&d<bd){best=n;bd=d;}
   }
-  if(best){best.hit=true;judge(ct-best.time);S.effects.push({lane,t:best.time,life:1});}
+  if(best){best.hit=true;const kind=judge(ct-best.time);S.effects.push({lane,t:best.time,life:1,kind});}
 }
 
 function togglePause(){
@@ -1362,7 +1364,7 @@ function frame(){
   }
   // misses (judged on the tap clock)
   for(const n of S.chart){
-    if(!n.hit&&!n.miss&&jt-n.time>CFG.hitWindow){n.miss=true;onMiss();}
+    if(!n.hit&&!n.miss&&jt-n.time>CFG.hitWindow){n.miss=true;onMiss(n.lane);}
   }
   draw(rt,pt);
   // HUD
@@ -1470,21 +1472,41 @@ function draw(ct,pt){
   ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.shadowColor='#ff3c9d';ctx.shadowBlur=16;
   ctx.beginPath();ctx.moveTo(G.cx-halfW(1)-8,G.hitY);ctx.lineTo(G.cx+halfW(1)+8,G.hitY);ctx.stroke();
   ctx.restore();
-  // frets (touch targets, >=48px tall)
+  // frets (touch targets, >=48px tall) — burst frets go red/orange + shake
   for(let l=0;l<CFG.lanes;l++){
     const x1=laneX(l,1),w1=(2*halfW(1)/CFG.lanes)*0.9,fh=G.fretH,fy=G.fretTop;
+    const burst=S.effects.find(e=>e.lane===l&&e.kind&&e.kind!=='hit');
+    const bx=burst?(Math.random()-0.5)*10*burst.life:0;
+    const bcol=burst?(burst.kind==='early'?'#ffb04d':'#ff5d7a'):null;
     ctx.save();
-    if(S.flash[l]>0){ctx.shadowColor=CFG.colors[l];ctx.shadowBlur=24;}
-    ctx.fillStyle=S.flash[l]>0?CFG.colors[l]:'rgba(20,10,35,0.9)';
-    ctx.strokeStyle=CFG.colors[l];ctx.lineWidth=2.5;
-    roundRect(x1-w1/2,fy,w1,fh,12);ctx.fill();ctx.stroke();
+    if(burst){ctx.shadowColor=bcol;ctx.shadowBlur=30;}
+    else if(S.flash[l]>0){ctx.shadowColor=CFG.colors[l];ctx.shadowBlur=24;}
+    ctx.fillStyle=burst?bcol:S.flash[l]>0?CFG.colors[l]:'rgba(20,10,35,0.9)';
+    ctx.strokeStyle=burst?bcol:CFG.colors[l];ctx.lineWidth=2.5;
+    roundRect(x1-w1/2+bx,fy,w1,fh,12);ctx.fill();ctx.stroke();
     ctx.restore();
   }
-  // hit effects
+  // hit effects: clean ring for on-time hits, explosion burst for early/late/miss
   S.effects=S.effects.filter(e=>e.life>0);
   for(const e of S.effects){
     e.life-=1/30;
     const x=laneX(e.lane,1);
+    if(e.kind&&e.kind!=='hit'){
+      const col=e.kind==='early'?'#ffb04d':'#ff5d7a', r=(1-e.life)*90+15;
+      ctx.save();ctx.globalAlpha=Math.max(0,e.life);
+      ctx.strokeStyle=col;ctx.lineWidth=5;
+      ctx.beginPath();ctx.arc(x,G.hitY,r,0,7);ctx.stroke();
+      ctx.lineWidth=4;
+      for(let i=0;i<8;i++){
+        const a=i*Math.PI/4+e.life*0.5, r1=r*0.4, r2=r+20;
+        ctx.beginPath();ctx.moveTo(x+Math.cos(a)*r1,G.hitY+Math.sin(a)*r1);ctx.lineTo(x+Math.cos(a)*r2,G.hitY+Math.sin(a)*r2);ctx.stroke();
+      }
+      ctx.strokeStyle='#ffffff';ctx.lineWidth=4;
+      const s=18;
+      ctx.beginPath();ctx.moveTo(x-s,G.hitY-s);ctx.lineTo(x+s,G.hitY+s);ctx.moveTo(x+s,G.hitY-s);ctx.lineTo(x-s,G.hitY+s);ctx.stroke();
+      ctx.restore();
+      continue;
+    }
     ctx.save();ctx.globalAlpha=Math.max(0,e.life);
     ctx.strokeStyle=CFG.colors[e.lane];ctx.lineWidth=4;
     ctx.beginPath();ctx.arc(x,G.hitY,(1-e.life)*70+10,0,7);ctx.stroke();
