@@ -104,7 +104,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
     <p class="sub" style="margin:4px 0 8px">YouTube Test 2.0. Tap LIBRARY to open the library window. That is where the songs live: sort by artist, sort by song name, or search. 311 Down and Last Call are already in the library with drum charts. New songs play now with a beat-grid chart; send Chappie the YouTube link in chat and he parses it from YouTube and builds the drum chart offline, about 10 minutes, then pushes it to the shared library for everyone.</p>
     <button class="btn hidden" id="demoMenuBtn">DEMO</button>
     <button class="btn" id="libMenuBtn">📚 LIBRARY</button>
-    <p class="sub" style="margin:8px 0">Songs live in the library window, not on this menu. Tap LIBRARY, then sort by artist, sort by song name, or search. 311 - Down lives in the library window under PRACTICE DEMO, it is not the main song on this menu.</p>
+    <p class="sub" style="margin:8px 0">Songs live in the library window, not on this menu. Tap LIBRARY, then sort by artist, sort by song name, or search. 311 - Down is in the library as the practice demo, it is not the main song on this menu.</p>
     <button class="btn hidden" id="freeFlowBtn">FREE FLOW</button>
     <input id="file" type="file" accept="audio/mpeg,audio/mp3,audio/*" class="hidden">
     <button class="btn secondary" id="boardsBtn">🏆 LEADERBOARDS</button>
@@ -127,9 +127,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
     <div id="libSortStatus" class="sub" style="min-height:20px">Showing all songs.</div>
     <div class="tag" style="margin-top:6px">LIBRARY SONGS</div>
     <div id="libList" style="text-align:left"></div>
-    <div class="tag" style="margin-top:14px">PRACTICE DEMO</div>
-    <p class="sub" style="margin:4px 0">311 - Down is the practice demo, to learn the game. It is not a regular library song selection.</p>
-    <div id="libDemoList" style="text-align:left"></div>
+    <p class="sub" style="margin:8px 0">311 - Down is the practice demo, to learn the game, and it is also a library song you can play normally.</p>
     <button class="btn secondary" id="libAddBtn">➕ ADD SONG</button>
     <div id="libMsg" style="min-height:22px;color:#9df0b5;font-size:13px"></div>
     <button class="btn secondary" id="libWindowBackBtn">BACK</button>
@@ -1862,16 +1860,13 @@ function libAll(){ const all=[...LIB_BUILTIN]; for(const e of libLoadLocal()){ i
 let LIB_SORT='default'; let LIB_SEARCH='';
 function renderLibrary(){
   const list=$('libList'); if(!list) return;
-  const demo=libAll().find(x=>x.videoId==='lYBIRHi5-o8');
-  const demoList=$('libDemoList');
-  if(demoList && demo){ demoList.innerHTML='<div style="border:1px dashed rgba(255,255,255,.35);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+esc(demo.title)+' · DEMO / PRACTICE</div><div class="sub" style="margin:2px 0">'+esc(demo.artist||'')+' · DRUM CHART · Practice only</div><button class="btn secondary" data-libplay="'+demo.videoId+'" style="margin-top:6px">PLAY DEMO</button></div>'; demoList.querySelectorAll('[data-libplay]').forEach(b=>b.addEventListener('click',()=>{ const e=libAll().find(x=>x.videoId===b.dataset.libplay); if(e) libPlay(e); })); }
-  let all=libAll().filter(x=>x.videoId!=='lYBIRHi5-o8');
+  let all=libAll();
   const q=(LIB_SEARCH||'').trim().toLowerCase();
   if(q){ all=all.filter(e=>((e.title||'').toLowerCase().includes(q))||((e.artist||'').toLowerCase().includes(q))); }
   if(LIB_SORT==='artist'){ all=[...all].sort((a,b)=>((a.artist||'').toLowerCase()>(b.artist||'').toLowerCase()?1:-1)||((a.title||'').toLowerCase()>(b.title||'').toLowerCase()?1:-1)); }
   else if(LIB_SORT==='song'){ all=[...all].sort((a,b)=>((a.title||'').toLowerCase()>(b.title||'').toLowerCase()?1:-1)||((a.artist||'').toLowerCase()>(b.artist||'').toLowerCase()?1:-1)); }
   const st=$('libSortStatus'); if(st){ let sortTxt='Showing all songs.'; if(LIB_SORT==='artist') sortTxt='Sorted by artist.'; if(LIB_SORT==='song') sortTxt='Sorted by song name.'; let searchTxt=''; if(q) searchTxt='Search: "'+LIB_SEARCH+'" · '; st.textContent=searchTxt+sortTxt+' '+all.length+' library song'+(all.length===1?'':'s')+'.'; }
-  list.innerHTML=all.length?all.map(e=>'<div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+esc(e.title)+'</div><div class="sub" style="margin:2px 0">'+esc(e.artist||'')+' · '+(e.drum?'DRUM CHART':'BEAT-GRID · DRUM CHART PENDING')+'</div><button class="btn" data-libplay="'+e.videoId+'" style="margin-top:6px">PLAY</button></div>').join(''):'<div class="sub">No songs match that search.</div>';
+  list.innerHTML=all.length?all.map(e=>'<div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+esc(e.title)+(e.videoId==='lYBIRHi5-o8'?' · DEMO / PRACTICE':'')+'</div><div class="sub" style="margin:2px 0">'+esc(e.artist||'')+' · '+(e.drum?'DRUM CHART':'BEAT-GRID · DRUM CHART PENDING')+(e.videoId==='lYBIRHi5-o8'?' · Practice demo':'')+'</div><button class="btn" data-libplay="'+e.videoId+'" style="margin-top:6px">PLAY</button></div>').join(''):'<div class="sub">No songs match that search.</div>';
   list.querySelectorAll('[data-libplay]').forEach(b=>b.addEventListener('click',()=>{ const e=libAll().find(x=>x.videoId===b.dataset.libplay); if(e) libPlay(e); }));
 }
 function libPlay(e){
