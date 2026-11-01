@@ -1228,7 +1228,7 @@ function mult(){const c=S.combo;return c>=30?4:c>=20?3:c>=10?2:1;}
 
 function judge(dt){
   const a=Math.abs(dt);let txt,pts,q,kind='hit';
-  if(a<CFG.perfect){txt='PERFECT!';pts=CFG.pts.perfect;q=1;}
+  if(a<CFG.perfect){txt='PERFECT!';pts=CFG.pts.perfect;q=1;kind='perfect';}
   else if(a<CFG.great){txt='GREAT!';pts=CFG.pts.great;q=0.83;}
   else if(a<CFG.good){txt='GOOD!';pts=CFG.pts.good;q=0.67;}
   else if(dt<0){txt='EARLY';pts=a>CFG.hitWindow?50:CFG.pts.early;q=a>CFG.hitWindow?0.35:0.5;kind='early';}
@@ -1476,8 +1476,9 @@ function draw(ct,pt){
   for(let l=0;l<CFG.lanes;l++){
     const x1=laneX(l,1),w1=(2*halfW(1)/CFG.lanes)*0.9,fh=G.fretH,fy=G.fretTop;
     const burst=S.effects.find(e=>e.lane===l&&e.kind&&e.kind!=='hit');
-    const bx=burst?(Math.random()-0.5)*10*burst.life:0;
-    const bcol=burst?(burst.kind==='early'?'#ffb04d':'#ff5d7a'):null;
+    const isPerfect=burst&&burst.kind==='perfect';
+    const bx=(burst&&!isPerfect)?(Math.random()-0.5)*10*burst.life:0;
+    const bcol=burst?(isPerfect?'#7dffb0':burst.kind==='early'?'#ffb04d':'#ff5d7a'):null;
     ctx.save();
     if(burst){ctx.shadowColor=bcol;ctx.shadowBlur=30;}
     else if(S.flash[l]>0){ctx.shadowColor=CFG.colors[l];ctx.shadowBlur=24;}
@@ -1486,13 +1487,13 @@ function draw(ct,pt){
     roundRect(x1-w1/2+bx,fy,w1,fh,12);ctx.fill();ctx.stroke();
     ctx.restore();
   }
-  // hit effects: clean ring for on-time hits, explosion burst for early/late/miss
+  // hit effects: clean ring for great/good, green burst for perfect, explosion burst for early/late/miss
   S.effects=S.effects.filter(e=>e.life>0);
   for(const e of S.effects){
     e.life-=1/30;
     const x=laneX(e.lane,1);
     if(e.kind&&e.kind!=='hit'){
-      const col=e.kind==='early'?'#ffb04d':'#ff5d7a', r=(1-e.life)*90+15;
+      const col=e.kind==='perfect'?'#7dffb0':e.kind==='early'?'#ffb04d':'#ff5d7a', r=(1-e.life)*90+15;
       ctx.save();ctx.globalAlpha=Math.max(0,e.life);
       ctx.strokeStyle=col;ctx.lineWidth=5;
       ctx.beginPath();ctx.arc(x,G.hitY,r,0,7);ctx.stroke();
@@ -1501,9 +1502,14 @@ function draw(ct,pt){
         const a=i*Math.PI/4+e.life*0.5, r1=r*0.4, r2=r+20;
         ctx.beginPath();ctx.moveTo(x+Math.cos(a)*r1,G.hitY+Math.sin(a)*r1);ctx.lineTo(x+Math.cos(a)*r2,G.hitY+Math.sin(a)*r2);ctx.stroke();
       }
-      ctx.strokeStyle='#ffffff';ctx.lineWidth=4;
-      const s=18;
-      ctx.beginPath();ctx.moveTo(x-s,G.hitY-s);ctx.lineTo(x+s,G.hitY+s);ctx.moveTo(x+s,G.hitY-s);ctx.lineTo(x-s,G.hitY+s);ctx.stroke();
+      if(e.kind==='perfect'){
+        ctx.fillStyle=col;
+        ctx.beginPath();ctx.arc(x,G.hitY,12*e.life+4,0,7);ctx.fill();
+      } else {
+        ctx.strokeStyle='#ffffff';ctx.lineWidth=4;
+        const s=18;
+        ctx.beginPath();ctx.moveTo(x-s,G.hitY-s);ctx.lineTo(x+s,G.hitY+s);ctx.moveTo(x+s,G.hitY-s);ctx.lineTo(x-s,G.hitY+s);ctx.stroke();
+      }
       ctx.restore();
       continue;
     }
