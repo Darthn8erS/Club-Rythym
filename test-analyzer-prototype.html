@@ -89,7 +89,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
   <div class="card">
     <div class="tag">THE STAGE IS YOURS</div>
     <h1>CLUB<br>RHYTHM</h1>
-    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE v4 · MEDIUM FIXED FROM HARD POOL</div>
+    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE v5 · BEAT SNAP + EXPERT-FIRST</div>
     <div class="row"><label for="pname">PLAYER NAME</label></div>
     <div class="row"><input id="pname" type="text" maxlength="24" placeholder="ROCKSTAR" autocomplete="off"></div>
     <div class="row"><label>DIFFICULTY</label></div>
@@ -622,6 +622,108 @@ async function buildBeatGridChart(buf, level){
 }
 
 
+/* ---------------- ANALYZER PROTOTYPE v5: beat snap + Expert-first reduction ----------------
+   GH/RB lesson, applied in miniature, no Essentia/CDN needed:
+   1. Beat grid first, from onsets alone: autocorrelation finds the period,
+      dpBeats (already in this file) tracks the beats through tempo drift,
+      median interval is the beat length. No forced even grid: if
+      quantizeBeats fits, use it, otherwise use the DP beats directly.
+   2. Snap every onset to the nearest local 16th (beat + k*interval/4,
+      interval taken from the two surrounding DP beats, so drift is tracked).
+      Merging duplicates keeps the strongest onset per 16th slot.
+      Avg snap shift on 311 Down was 30ms, so this quantizes, not rewrites.
+   3. Expert chart = snapped onsets, strength >= 25th percentile, sounding.
+      No extra min gap beyond the 16th merge (a fixed 0.15s gap would
+      systematically drop consecutive 16ths, whose step is ~0.128s at 117 BPM).
+   4. Medium and Low are REDUCTIONS of Expert, not separate thresholds:
+      Medium: score-greedy, min gap 0.35s, score = strength*(0.6+bass+bright).
+      Low: beat-weighted score-greedy, min gap 0.55s, score *= 1.5 on a beat,
+      1.0 near an 8th/16th, 0.6 otherwise, so Low follows strong beats.
+      Spaces are kept where notes were removed; no note is stretched.
+   If the beat grid fails for any reason, buildChart falls back to the
+   v4 onset builder unchanged, so a v5 failure never breaks a song v4 played. */
+function estimateBeatGrid(events, flux, dt, duration){
+  if(!events.length || !flux || !(dt>0) || !(duration>10)) return null;
+  const n=Math.max(16,Math.ceil(duration/dt));
+  const O=new Float64Array(n); let mx=0;
+  for(const e of events){ const i=Math.round(e.time/dt); if(i>=0&&i<n){ O[i]+=e.strength; if(O[i]>mx)mx=O[i]; } }
+  if(!(mx>0)) return null;
+  for(let i=0;i<n;i++) O[i]/=mx;
+  let sum2=0; for(let i=0;i<n;i++) sum2+=O[i]*O[i];
+  if(!(sum2>0)) return null;
+  let bestLag=-1, bestCorr=-1;
+  for(let lag=Math.round(0.35/dt); lag<=Math.round(1.1/dt); lag++){
+    let s=0; for(let i=0;i+lag<n;i++) s+=O[i]*O[i+lag];
+    const c=s/sum2;
+    if(c>bestCorr){bestCorr=c;bestLag=lag;}
+  }
+  if(bestLag<0) return null;
+  let period=bestLag*dt;
+  if(period<0.4) period*=2; // double-time lock -> slower pulse
+  if(!(period>=0.4&&period<=1.2)) return null;
+  const beats=dpBeats(flux, dt, period, duration, events);
+  if(beats.length<8) return null;
+  const ivs=[]; for(let i=1;i<beats.length;i++) ivs.push(beats[i]-beats[i-1]);
+  ivs.sort((a,b)=>a-b);
+  const interval=ivs[Math.floor(ivs.length/2)];
+  if(!(interval>0.2&&interval<1.2)) return null;
+  const q=quantizeBeats(beats, duration);
+  const finalBeats=q?q.beats:beats;
+  const finalInterval=q?q.interval:interval;
+  return {beats:finalBeats, interval:finalInterval, bpm:60/finalInterval};
+}
+function snapEventsToBeatGrid(events, grid){
+  const beats=grid.beats, med=grid.interval;
+  const out=[];
+  for(const e of events){
+    let lo=0, hi=beats.length-1, idx=-1;
+    while(lo<=hi){ const m=(lo+hi)>>1; if(beats[m]<=e.time){idx=m; lo=m+1;} else hi=m-1; }
+    let base, interval;
+    if(idx<0){ base=beats[0]; interval=med; }
+    else if(idx>=beats.length-1){ base=beats[beats.length-1]; interval=med; }
+    else { base=beats[idx]; interval=beats[idx+1]-beats[idx]; }
+    if(!(interval>0.2&&interval<1.2)) interval=med;
+    const step=interval/4;
+    const snapped=Math.max(0, base+Math.round((e.time-base)/step)*step);
+    out.push({time:snapped, strength:e.strength, bass:e.bass||0, bright:e.bright||0});
+  }
+  out.sort((a,b)=>a.time-b.time);
+  const merged=[];
+  for(const e of out){
+    const last=merged[merged.length-1];
+    if(last && Math.abs(e.time-last.time)<0.02){ if(e.strength>last.strength) merged[merged.length-1]=e; }
+    else merged.push(e);
+  }
+  return merged;
+}
+function buildSnappedChart(events, level, sounding, grid){
+  const snapped=snapEventsToBeatGrid(events, grid);
+  const strengths=snapped.map(e=>e.strength).sort((a,b)=>a-b);
+  const thr=strengths.length?strengths[Math.floor(strengths.length*0.25)]:0;
+  const expert=snapped.filter(e=>e.strength>=thr && sounding(e.time))
+    .map(e=>({time:e.time, score:e.strength*(0.6+(e.bass||0)+(e.bright||0))}));
+  if(expert.length<8) return null;
+  let picked;
+  if(level==='high'){ picked=expert; }
+  else if(level==='medium'){
+    const c=[...expert].sort((a,b)=>b.score-a.score);
+    picked=[];
+    for(const x of c){ if(picked.every(q=>Math.abs(q.time-x.time)>=0.35)) picked.push(x); }
+    picked.sort((a,b)=>a.time-b.time);
+  } else { // low: beat-weighted, min gap 0.55s
+    const c=expert.map(n=>{
+      let nearest=1e9;
+      for(const b of grid.beats){ const d=Math.abs(b-n.time); if(d<nearest) nearest=d; if(b>n.time+0.1) break; }
+      const w=nearest<=0.03?1.5:nearest<=0.13?1.0:0.6;
+      return {...n, s2:n.score*w};
+    }).sort((a,b)=>b.s2-a.s2);
+    picked=[];
+    for(const x of c){ if(picked.every(q=>Math.abs(q.time-x.time)>=0.55)) picked.push(x); }
+    picked.sort((a,b)=>a.time-b.time);
+  }
+  return {chart:applyMusicalLanes(picked.map(q=>({time:q.time,lane:0,hit:false,miss:false})), events), engine:'onsets', bpm:grid.bpm};
+}
+
 /* ---------------- ANALYZER PROTOTYPE: onset-first chart ----------------
    Difference from the old builder: notes come from detected attacks
    themselves, not from a beat grid. Beats are NOT used to place notes
@@ -671,10 +773,20 @@ async function buildChart(buf, level){
   const analysis=analyzeAudio(buf);
   analysis.events=analysis.events.filter(e=>sounding(e.time));
   const events=analysis.events;
-  const onsetChart=buildOnsetChart(events, level, sounding);
+  // v5: beat snap + Expert-first reduction first; v4 builder is the fallback.
+  let onsetChart=null, onsetBpm=0;
+  try{
+    const grid=estimateBeatGrid(events, analysis.flux, analysis.dt, buf.duration);
+    if(grid){
+      const snapped=buildSnappedChart(events, level, sounding, grid);
+      if(snapped && snapped.chart.length>=8){ onsetChart=snapped.chart; onsetBpm=snapped.bpm; }
+      console.log('[cr3] v5 beat grid:', grid.bpm.toFixed(1)+' BPM, interval '+grid.interval.toFixed(3)+'s, beats '+grid.beats.length);
+    }
+  }catch(e){ console.warn('[cr3] v5 beat snap failed, falling back to v4:',(e&&e.message)||e); }
+  if(!onsetChart) onsetChart=buildOnsetChart(events, level, sounding);
   if(onsetChart.length>=8){
     console.log('[cr3] onset chart:',onsetChart.length,'notes, level:',level);
-    return {chart:onsetChart,engine:'onsets',bpm:0};
+    return {chart:onsetChart,engine:'onsets',bpm:onsetBpm};
   }
   console.warn('[cr3] onset chart too sparse:',onsetChart.length,'falling back to beat grid');
   try{
@@ -1259,7 +1371,7 @@ async function startRun(buf,label,level){
   // Diagnostic v3: show chart size at the top for 8s, so a 1-note chart
   // vs a frame stall can be told apart on the phone.
   S.diagUntil=performance.now()+8000;
-  if(bc.engine==='onsets') setBgStatus('ONSET CHART · '+chart.length+' notes · first '+chart[0].time.toFixed(1)+'s · last '+chart[chart.length-1].time.toFixed(1)+'s');
+  if(bc.engine==='onsets') setBgStatus('ONSET CHART · '+chart.length+' notes'+(bc.bpm>0?' · '+Math.round(bc.bpm)+' BPM':'')+' · first '+chart[0].time.toFixed(1)+'s · last '+chart[chart.length-1].time.toFixed(1)+'s');
   hideAllPanels(); hide('menu'); show('hud'); show('songlabel');
   $('songlabel').textContent=label+' · '+level.toUpperCase()+(bc.engine==='beats'&&bc.bpm>0?' · ♪ '+Math.round(bc.bpm)+' BPM':bc.engine==='onsets'?' · ONSET CHART':'');
   show('bgstatus');
