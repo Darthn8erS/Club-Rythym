@@ -89,7 +89,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
   <div class="card">
     <div class="tag">THE STAGE IS YOURS</div>
     <h1>CLUB<br>RHYTHM</h1>
-    <div class="tag" style="margin-top:6px">CHAPPIES TEST GAME · WIDE WINDOWS</div>
+    <div class="tag" style="margin-top:6px">CHAPPIES TEST GAME · RELAY WINDOWS · 5S</div>
     <div class="row"><label for="pname">PLAYER NAME</label></div>
     <div class="row"><input id="pname" type="text" maxlength="24" placeholder="ROCKSTAR" autocomplete="off"></div>
     <div class="row"><label>DIFFICULTY</label></div>
@@ -220,8 +220,8 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function hashNoise(n){const x=Math.sin(n*127.1+42)*43758.5453;return x-Math.floor(x);}
 
 const CFG={
-  lanes:5, approach:5.0, hitWindow:1.5, earlyWindow:1.5, leadIn:5.0,
-  perfect:0.20, great:0.40, good:0.80,       // |dt| windows (s) - RELAY TEST, wider than normal
+  lanes:5, approach:10.0, hitWindow:5.0, earlyWindow:5.0, leadIn:5.0,
+  perfect:0.50, great:1.00, good:2.00,       // |dt| windows (s) - CHAPPIES TEST v2, relay-agent windows: agent frame+think loop is seconds, not ms
   pts:{perfect:150,great:125,good:100,early:75},
   multAt:[10,20,30],                            // combo thresholds -> x2/x3/x4
   spacing:{low:0.68,medium:0.43,high:0.31},      // chart density per level
