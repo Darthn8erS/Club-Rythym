@@ -89,7 +89,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
   <div class="card">
     <div class="tag">THE STAGE IS YOURS</div>
     <h1>CLUB<br>RHYTHM</h1>
-    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE v3 · ONSET CHART · DIAGNOSTIC + WATCHDOG</div>
+    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE v4 · MEDIUM FIXED FROM HARD POOL</div>
     <div class="row"><label for="pname">PLAYER NAME</label></div>
     <div class="row"><input id="pname" type="text" maxlength="24" placeholder="ROCKSTAR" autocomplete="off"></div>
     <div class="row"><label>DIFFICULTY</label></div>
@@ -633,6 +633,23 @@ async function buildBeatGridChart(buf, level){
    below as buildBeatGridChart and is only used if the onset chart
    comes out too sparse (fewer than 8 notes). */
 function buildOnsetChart(events, level, sounding){
+  // Medium v4 (Nate, Nov 1): keep high expert unchanged, fix medium by
+  // starting from HARD's event pool (25th percentile, not the median)
+  // so weaker drum/guitar attacks are not dropped first, leaving only
+  // loud vocal syllables. Then thin to medium density by score, not by
+  // chronological first-wins: score = strength * (0.6 + bass + bright),
+  // so a drum/guitar attack close to a vocal syllable can win the gap.
+  if(level==='medium'){
+    const strengths=events.map(e=>e.strength).sort((a,b)=>a-b);
+    const thr=strengths.length?strengths[Math.floor(strengths.length*0.25)]:0;
+    const cands=events.filter(e=>e.strength>=thr && sounding(e.time))
+      .map(e=>({time:e.time,score:e.strength*(0.6+(e.bass||0)+(e.bright||0))}));
+    cands.sort((a,b)=>b.score-a.score);
+    const picked=[];
+    for(const c of cands){ if(picked.every(q=>Math.abs(q.time-c.time)>=0.35)) picked.push(c); }
+    picked.sort((a,b)=>a.time-b.time);
+    return applyMusicalLanes(picked.map(q=>({time:q.time,lane:0,hit:false,miss:false})), events);
+  }
   const mingap={low:0.45,medium:0.28,high:0.15}[level];
   const pct={low:0.75,medium:0.50,high:0.25}[level];
   const strengths=events.map(e=>e.strength).sort((a,b)=>a-b);
