@@ -1447,7 +1447,7 @@ function draw(ct,pt){
     const dt=n.time-ct;
     if(dt>CFG.approach||dt<-CFG.hitWindow) continue;
     const p=1-dt/CFG.approach, y=noteY(p), x=laneX(n.lane,p);
-    const w=(2*halfW(p)/CFG.lanes)*0.82, h=Math.max(10,26*(0.4+0.6*p));
+    const w=(2*halfW(p)/CFG.lanes)*0.92, h=Math.max(14,34*(0.45+0.55*p));
     const glowRaw = dt>=0 ? Math.max(0,1-dt/0.6) : Math.max(0,1-(-dt)/CFG.hitWindow);
     const glow = glowRaw*glowRaw;
     ctx.save();
