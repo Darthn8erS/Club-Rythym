@@ -207,7 +207,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
    (5) pause truly resumes via AudioContext.suspend/resume; (6) MP3
    upload uses a real button -> input.click() (works on mobile);
    (7) leaderboards stored per song + difficulty.
-   v2: frets/hit-bar raised (hit at 66% height, frets at 78%) for thumb
+   hit bar through fret buttons at 78% (note lands on button, Nov 1)
    reach; iOS hardening (webkitAudioContext, callback-form decodeAudioData,
    audio unlock on tap, visualViewport resize).
    v3: two-phase tap-to-the-beat calibration (audio clicks + visual flashes)
@@ -1315,7 +1315,7 @@ function layout(){
   W=window.innerWidth; H=window.innerHeight;
   canvas.width=W*DPR; canvas.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
   const cx=W/2, fretH=Math.max(52,H*0.07), fretY=H*0.78;
-  G={cx,topY:H*0.08,hitY:H*0.66,
+  G={cx,topY:H*0.08,hitY:fretY,
      botHalf:Math.min(W*0.44,300),topHalf:Math.min(W*0.44,300)*0.42,
      fretH,fretY,fretTop:fretY-fretH/2,zoneTop:H*0.56};
 }
