@@ -1949,11 +1949,17 @@ async function loadBoards(level){
   try{
     const snap=await getDocs(query(collection(db,'scores'),orderBy('score','desc'),limit(100)));
     const rows=[]; snap.forEach(d=>{ const r=d.data(); if(r.difficulty===level) rows.push(r); });
-    const byVideo={}; for(const r of rows){ (byVideo[r.videoId||'unknown'] ||= []).push(r); }
+    const byVideo={}; for(const r of rows){ const vid=r.videoId||('legacy:'+(r.title||r.song||r.label||'Legacy')); (byVideo[vid] ||= []).push(r); }
     let html='';
-    for(const vid of Object.keys(byVideo)){
-      const arr=byVideo[vid].slice(0,8); const title=arr[0].title||vid;
-      html+='<div class="tag" style="margin:8px 0 2px">'+escHtml(title)+'</div>'+arr.map((r,j)=>'<div class="lbrow"><span>'+(j+1)+'. '+escHtml(r.playerName||'ROCKSTAR')+'</span><span>'+r.score+' · '+r.accuracy+'%</span></div>').join('');
+    const keys=Object.keys(byVideo).sort((a,b)=>(a.startsWith('legacy:')?1:0)-(b.startsWith('legacy:')?1:0));
+    for(const vid of keys){
+      const arr=byVideo[vid].slice(0,8); const isLegacy=vid.startsWith('legacy:');
+      const title=isLegacy ? 'Legacy scores (earlier tests, no video ID)' : (arr[0].title||vid);
+      html+='<div class="tag" style="margin:8px 0 2px">'+escHtml(title)+'</div>'+arr.map((r,j)=>{
+        const name=r.playerName||r.name||'ROCKSTAR';
+        const acc=(r.accuracy!=null?r.accuracy:(r.acc!=null?r.acc:null));
+        return '<div class="lbrow"><span>'+(j+1)+'. '+escHtml(name)+'</span><span>'+r.score+(acc!=null?' · '+acc+'%':'')+'</span></div>';
+      }).join('');
     }
     setSharedRows(html||'<p class="note">No shared scores yet for this difficulty — go play something.</p>');
   }catch(e){
