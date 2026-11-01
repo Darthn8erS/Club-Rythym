@@ -89,7 +89,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
   <div class="card">
     <div class="tag">THE STAGE IS YOURS</div>
     <h1>CLUB<br>RHYTHM</h1>
-    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE · ONSET CHART · MP3 ONLY</div>
+    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE v2 · ONSET CHART · DRUMS/GUITAR BIAS</div>
     <div class="row"><label for="pname">PLAYER NAME</label></div>
     <div class="row"><input id="pname" type="text" maxlength="24" placeholder="ROCKSTAR" autocomplete="off"></div>
     <div class="row"><label>DIFFICULTY</label></div>
@@ -272,7 +272,7 @@ function analyzeAudio(buffer){
   const L=levels.length, env=new Array(L);
   for(let i=0;i<L;i++){let pk=0;for(let j=Math.max(0,i-3);j<=Math.min(L-1,i+3);j++)pk=Math.max(pk,levels[j]);env[i]=pk;}
   for(let i=0;i<feats.length;i++){
-    const f=feats[i], fp=feats[Math.max(0,i-2)]; let v=0; const w=[1.1,1.4,1.1];
+    const f=feats[i], fp=feats[Math.max(0,i-2)]; let v=0; const w=[1.6,0.8,1.6]; // prototype v2: favor bass (kick) + treble (hat/snare/guitar pick) over mid body (vocals)
     for(let bd=0;bd<3;bd++){const now=f[bd],pr=fp[bd];v+=Math.max(0,now-pr)/(0.003+now+pr)*w[bd];}
     flux.push(v);
   }
