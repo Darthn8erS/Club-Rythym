@@ -89,7 +89,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
   <div class="card">
     <div class="tag">THE STAGE IS YOURS</div>
     <h1>CLUB<br>RHYTHM</h1>
-    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE v2 · ONSET CHART · DRUMS/GUITAR BIAS</div>
+    <div class="tag" style="margin-top:6px">ANALYZER PROTOTYPE v3 · ONSET CHART · DIAGNOSTIC + WATCHDOG</div>
     <div class="row"><label for="pname">PLAYER NAME</label></div>
     <div class="row"><input id="pname" type="text" maxlength="24" placeholder="ROCKSTAR" autocomplete="off"></div>
     <div class="row"><label>DIFFICULTY</label></div>
@@ -1239,16 +1239,35 @@ async function startRun(buf,label,level){
   const when=ac().currentTime+0.12+CFG.leadIn;
   songSrc.start(when); startAt=when;
   if(S.freeFlow){ ytStop(); hide('bgstatus'); } else ytStartRun(when);
+  // Diagnostic v3: show chart size at the top for 8s, so a 1-note chart
+  // vs a frame stall can be told apart on the phone.
+  S.diagUntil=performance.now()+8000;
+  if(bc.engine==='onsets') setBgStatus('ONSET CHART · '+chart.length+' notes · first '+chart[0].time.toFixed(1)+'s · last '+chart[chart.length-1].time.toFixed(1)+'s');
   hideAllPanels(); hide('menu'); show('hud'); show('songlabel');
   $('songlabel').textContent=label+' · '+level.toUpperCase()+(bc.engine==='beats'&&bc.bpm>0?' · ♪ '+Math.round(bc.bpm)+' BPM':bc.engine==='onsets'?' · ONSET CHART':'');
   show('bgstatus');
   $('rating').style.opacity=0;
+  if(S.watchdog) clearInterval(S.watchdog);
+  // Watchdog v3: if the render loop stops while audio is playing
+  // (screen frozen on READY, song heard, no new notes), restart it.
+  S.watchdog=setInterval(()=>{
+    if(S.state!=='playing') return;
+    if(!AC) return;
+    const audioPt=AC.currentTime-startAt-outLatency();
+    if(audioPt>0 && S.lastFrameAt && performance.now()-S.lastFrameAt>2500){
+      console.warn('[cr3] frame watchdog: restarting RAF, audioPt', audioPt.toFixed(2));
+      setBgStatus('Frame restarted · audio '+audioPt.toFixed(1)+'s');
+      S.diagUntil=performance.now()+5000;
+      S.raf=requestAnimationFrame(frame);
+    }
+  },1000);
   S.raf=requestAnimationFrame(frame);
 }
 function stopAudio(){ if(songSrc){try{songSrc.stop();}catch(e){} try{songSrc.disconnect();}catch(e){} songSrc=null;} }
 
 function endRun(){
   if(S.ended) return; S.ended=true;
+  if(S.watchdog) clearInterval(S.watchdog);
   cancelAnimationFrame(S.raf); stopAudio();
   ytStop();
   S.freeFlowWas=S.freeFlow; S.freeFlow=false;
@@ -1374,6 +1393,7 @@ function noteY(p){return G.topY+(G.hitY-G.topY)*Math.pow(p,1.3);}
 let beams=[];
 function frame(){
   if(S.state!=='playing') return;
+  S.lastFrameAt=performance.now();
   const isLink=S.mode==='linkonly';
   const rt=isLink?ytTime()+userOffset+calVO:renderClock();
   const jt=isLink?ytTime()+userOffset+calVO+calIO:judgeClock();
@@ -1400,7 +1420,7 @@ function frame(){
       S.lastYtTime=nowT;
     }
   }
-  if(S.freeFlow) hide('bgstatus');
+  if(S.freeFlow && !(S.diagUntil && performance.now()<S.diagUntil)) hide('bgstatus');
   // bg3: after audio starts, show loading until the player actually reaches PLAYING/BUFFERING
   if(S.ytActive&&pt>=0){
     const el=$('bgstatus');
