@@ -147,7 +147,7 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
     <div class="row"><input id="libBpm" type="range" min="60" max="200" step="1" value="120"></div>
     <button class="btn" id="libAddConfirmBtn">ADD TO LIBRARY</button>
     <div id="libAddMsg" style="min-height:22px;color:#ffcaca;font-size:13px"></div>
-    <p class="sub">Prototype honesty: a new song added here plays now with a beat-grid chart, and is saved in this device's library only. Its drum chart is NOT built on the phone. Send Chappie the YouTube link in chat, he parses it from YouTube and builds the drum chart offline in about 10 minutes, then pushes it to the shared library for everyone.</p>
+    <p class="sub">Prototype honesty: a new song added here is pending, NOT playable with a beat-grid chart, and is saved in this device's library only until its drum chart is built. Its drum chart is NOT built on the phone. Send Chappie the YouTube link in chat, he parses it from YouTube and builds the drum chart offline in about 10 minutes, then pushes it to the shared library for everyone.</p>
     <button class="btn secondary" id="libBackBtn">BACK</button>
   </div>
 </div>
@@ -1874,13 +1874,18 @@ function renderLibrary(){
   if(LIB_SORT==='artist'){ all=[...all].sort((a,b)=>((a.artist||'').toLowerCase()>(b.artist||'').toLowerCase()?1:-1)||((a.title||'').toLowerCase()>(b.title||'').toLowerCase()?1:-1)); }
   else if(LIB_SORT==='song'){ all=[...all].sort((a,b)=>((a.title||'').toLowerCase()>(b.title||'').toLowerCase()?1:-1)||((a.artist||'').toLowerCase()>(b.artist||'').toLowerCase()?1:-1)); }
   const st=$('libSortStatus'); if(st){ let sortTxt='Showing all songs.'; if(LIB_SORT==='artist') sortTxt='Sorted by artist.'; if(LIB_SORT==='song') sortTxt='Sorted by song name.'; let searchTxt=''; if(q) searchTxt='Search: "'+LIB_SEARCH+'" · '; st.textContent=searchTxt+sortTxt+' '+all.length+' library song'+(all.length===1?'':'s')+'.'; }
-  list.innerHTML=all.length?all.map(e=>'<div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+esc(e.title)+(e.videoId==='lYBIRHi5-o8'?' · DEMO / PRACTICE':'')+'</div><div class="sub" style="margin:2px 0">'+esc(e.artist||'')+' · '+(e.drum?'DRUM CHART':'BEAT-GRID · DRUM CHART PENDING')+(e.videoId==='lYBIRHi5-o8'?' · Practice demo':'')+'</div><button class="btn" data-libplay="'+e.videoId+'" style="margin-top:6px">PLAY</button></div>').join(''):'<div class="sub">No songs match that search.</div>';
+  list.innerHTML=all.length?all.map(e=>'<div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+esc(e.title)+(e.videoId==='lYBIRHi5-o8'?' · DEMO / PRACTICE':'')+'</div><div class="sub" style="margin:2px 0">'+esc(e.artist||'')+' · '+(e.drum?'DRUM CHART':'DRUM CHART BUILDING · NOT PLAYABLE YET')+(e.videoId==='lYBIRHi5-o8'?' · Practice demo':'')+'</div>'+(e.drum?'<button class="btn" data-libplay="'+e.videoId+'" style="margin-top:6px">PLAY</button>':'<div class="sub" style="margin-top:6px">Send Chappie this YouTube link in chat for a drum build, about 10 minutes, then everyone gets the same drum gameplay.</div>')+'</div>').join(''):'<div class="sub">No songs match that search.</div>';
   list.querySelectorAll('[data-libplay]').forEach(b=>b.addEventListener('click',()=>{ const e=libAll().find(x=>x.videoId===b.dataset.libplay); if(e) libPlay(e); }));
 }
 function libPlay(e){
   if(e.videoId==='lYBIRHi5-o8'){ startDrumYouTubeRun(); }
   else if(e.videoId==='jXGDnVHC1vs'){ startDrumLastCallRun(); }
-  else { S.drumYt=false; S.drumVideoId=null; startLinkOnlyRun(e.videoId, e.bpm||120); }
+  else {
+    // Library rule: library songs are drum-chart only, never beat-grid.
+    // A new link is pending until Chappie builds and pushes its drum chart.
+    const lm=$('libMsg'); if(lm) lm.textContent='Drum chart not built yet for "'+(e.title||'this song')+'". Send Chappie the YouTube link in chat, he builds it in about 10 minutes, then it plays with the drum chart for everyone.';
+    hideAllPanels(); show('libWindow'); renderLibrary();
+  }
 }
 function libAdd(){
   const msg=$('libAddMsg'); if(msg) msg.textContent='';
@@ -1892,8 +1897,8 @@ function libAdd(){
   let bpm=parseInt($('libBpm').value||'120',10); if(!isFinite(bpm)) bpm=120; bpm=Math.max(60,Math.min(200,bpm));
   const local=libLoadLocal(); local.push({title:title,artist:artist,videoId:id,bpm:bpm,drum:false}); libSaveLocal(local);
   renderLibrary();
-  if(msg) msg.textContent='Added to your library (beat-grid now, drum chart pending).';
-  const lm=$('libMsg'); if(lm) lm.textContent='Added: '+title+' — play it now with beat-grid, or send Chappie the MP3 + link for a drum build.';
+  if(msg) msg.textContent='Added as pending. Drum chart not built yet — send Chappie the link in chat.';
+  const lm=$('libMsg'); if(lm) lm.textContent='Added: '+title+' — pending drum build. Send Chappie the YouTube link in chat, about 10 minutes, then it plays with the drum chart for everyone.';
   hideAllPanels(); show('libWindow'); renderLibrary();
 }
 $('libAddBtn').addEventListener('click',()=>{hideAllPanels();show('libModal');const m=$('libAddMsg');if(m)m.textContent='';});
