@@ -1904,6 +1904,7 @@ $('quitBtn').addEventListener('click',()=>{stopAudio();ytStop();S.state='menu';S
 
 /* ---------------- Library prototype ---------------- */
 const LIB_BUILTIN=[{title:'311 - Down',artist:'311',videoId:'lYBIRHi5-o8',bpm:117,drum:true},{title:'Last Call',artist:'Red Leather',videoId:'jXGDnVHC1vs',bpm:112,drum:true},{title:'Heathens',artist:'Twenty One Pilots',videoId:'UprcpdwuwCg',bpm:91,drum:true}];
+window.CR3_BUILTIN_SONGS=LIB_BUILTIN.map(x=>({title:(x.title||'').toLowerCase(),artist:(x.artist||'').toLowerCase(),drum:!!x.drum}));
 function libLoadLocal(){ try{ return JSON.parse(localStorage.getItem('cr_library')||'[]'); }catch(e){ return []; } }
 function libSaveLocal(arr){ try{ localStorage.setItem('cr_library',JSON.stringify(arr)); }catch(e){} }
 function libAll(){ const all=[...LIB_BUILTIN]; for(const e of libLoadLocal()){ if(all.some(x=>x.videoId===e.videoId)) continue; const sameSong=all.some(x=>x.drum&&((x.title||'').toLowerCase()===(e.title||'').toLowerCase())&&((x.artist||'').toLowerCase()===(e.artist||'').toLowerCase())); if(sameSong) continue; all.push(e); } return all; }
@@ -2038,7 +2039,7 @@ async function loadQueue(){
     const snap=await getDocs(query(collection(db,'song_requests'),orderBy('createdAt','desc'),limit(50)));
     const rows=[]; snap.forEach(d=>{ const r=d.data(); rows.push(r); });
     // createdAt serverTimestamp may be null for very new docs, keep them at top
-    list.innerHTML=rows.length?rows.map(r=>'<div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+escHtml(r.title||r.videoId||'YouTube song')+'</div><div class="sub" style="margin:2px 0">'+escHtml(r.artist||'')+' · '+(r.status||'pending').toUpperCase()+' · submitted by '+escHtml(r.submittedBy||'player')+'</div></div>').join(''):'<p class="note">No songs requested yet — be the first to add one.</p>';
+    list.innerHTML=rows.length?rows.map(r=>{ const built=(window.CR3_BUILTIN_SONGS||[]).some(x=>x.drum&&x.title===(r.title||'').toLowerCase()&&x.artist===(r.artist||'').toLowerCase()); const st=built?'BUILT · IN LIBRARY':(r.status||'pending').toUpperCase(); return '<div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+escHtml(r.title||r.videoId||'YouTube song')+'</div><div class="sub" style="margin:2px 0">'+escHtml(r.artist||'')+' · '+st+' · submitted by '+escHtml(r.submittedBy||'player')+'</div></div>'; }).join(''):'<p class="note">No songs requested yet — be the first to add one.</p>';
   }catch(e){
     console.warn('[cr3] queue load failed',e);
     list.innerHTML='<p class="note">Shared queue: load failed — '+(e.code||e.message||'unknown')+'. If this is permission-denied, the queue rules are not published yet.</p>';
