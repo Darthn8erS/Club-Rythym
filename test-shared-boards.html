@@ -128,12 +128,15 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
     <div class="tag" style="margin-top:6px">LIBRARY SONGS</div>
     <div id="libList" style="text-align:left"></div>
     <p class="sub" style="margin:8px 0">311 - Down is the practice demo, to learn the game, and it is also a library song you can play normally.</p>
-    <div class="tag" style="margin-top:14px">REQUESTED SONGS · SHARED QUEUE</div>
+    <div id="libQueueSection" style="display:none">
+    <div class="tag" style="margin-top:14px">REQUESTED SONGS · SHARED QUEUE · OWNER VIEW</div>
     <p class="sub" style="margin:4px 0">Songs other players submitted from inside the game. These are not local, they live on a shared server, not on your phone and not on Chappie's computer. When a requested song's chart is built, it moves into the library above for everyone.</p>
     <div id="libQueueList" style="text-align:left"></div>
     <button class="btn secondary" id="libQueueRefreshBtn">REFRESH REQUESTS</button>
+    </div>
     <div id="libQueueMsg" style="min-height:22px;color:#9df0b5;font-size:13px"></div>
     <button class="btn secondary" id="libAddBtn">➕ ADD SONG</button>
+    <button class="btn secondary" id="libOwnerBtn" style="opacity:.7">OWNER: SHOW REQUESTS</button>
     <div id="libMsg" style="min-height:22px;color:#9df0b5;font-size:13px"></div>
     <button class="btn secondary" id="libWindowBackBtn">BACK</button>
   </div>
@@ -1908,7 +1911,8 @@ window.CR3_BUILTIN_SONGS=LIB_BUILTIN.map(x=>({title:(x.title||'').toLowerCase(),
 function libLoadLocal(){ try{ return JSON.parse(localStorage.getItem('cr_library')||'[]'); }catch(e){ return []; } }
 function libSaveLocal(arr){ try{ localStorage.setItem('cr_library',JSON.stringify(arr)); }catch(e){} }
 function libAll(){ const all=[...LIB_BUILTIN]; for(const e of libLoadLocal()){ if(all.some(x=>x.videoId===e.videoId)) continue; const sameSong=all.some(x=>x.drum&&((x.title||'').toLowerCase()===(e.title||'').toLowerCase())&&((x.artist||'').toLowerCase()===(e.artist||'').toLowerCase())); if(sameSong) continue; all.push(e); } return all; }
-let LIB_SORT='default'; let LIB_SEARCH='';
+let LIB_SORT='default';
+setTimeout(()=>{ const ob=document.getElementById('libOwnerBtn'); const qs=document.getElementById('libQueueSection'); if(ob&&qs){ ob.addEventListener('click',()=>{ const show=qs.style.display==='none'; qs.style.display=show?'block':'none'; ob.textContent=show?'OWNER: HIDE REQUESTS':'OWNER: SHOW REQUESTS'; if(show&&window.CR3_SHARED&&window.CR3_SHARED.loadQueue) window.CR3_SHARED.loadQueue(); }); } },0); let LIB_SEARCH='';
 function renderLibrary(){
   const list=$('libList'); if(!list) return;
   let all=libAll();
