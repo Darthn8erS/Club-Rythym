@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#05020b">
-<title>Club Rhythm - Shared Leaderboards Test</title>
+<title>Club Rhythm - Shared Library Queue Test</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -128,6 +128,11 @@ input[type=range]{width:100%;accent-color:#ff3c9d;min-height:44px}
     <div class="tag" style="margin-top:6px">LIBRARY SONGS</div>
     <div id="libList" style="text-align:left"></div>
     <p class="sub" style="margin:8px 0">311 - Down is the practice demo, to learn the game, and it is also a library song you can play normally.</p>
+    <div class="tag" style="margin-top:14px">REQUESTED SONGS · SHARED QUEUE</div>
+    <p class="sub" style="margin:4px 0">Songs other players submitted from inside the game. These are not local, they live on a shared server, not on your phone and not on Chappie's computer. When a requested song's chart is built, it moves into the library above for everyone.</p>
+    <div id="libQueueList" style="text-align:left"></div>
+    <button class="btn secondary" id="libQueueRefreshBtn">REFRESH REQUESTS</button>
+    <div id="libQueueMsg" style="min-height:22px;color:#9df0b5;font-size:13px"></div>
     <button class="btn secondary" id="libAddBtn">➕ ADD SONG</button>
     <div id="libMsg" style="min-height:22px;color:#9df0b5;font-size:13px"></div>
     <button class="btn secondary" id="libWindowBackBtn">BACK</button>
@@ -1897,6 +1902,8 @@ function libAdd(){
   let bpm=parseInt($('libBpm').value||'120',10); if(!isFinite(bpm)) bpm=120; bpm=Math.max(60,Math.min(200,bpm));
   const local=libLoadLocal(); local.push({title:title,artist:artist,videoId:id,bpm:bpm,drum:false}); libSaveLocal(local);
   renderLibrary();
+  if(window.CR3_SHARED&&window.CR3_SHARED.submitSong){ window.CR3_SHARED.submitSong({videoId:id,title:title,artist:artist,bpm:bpm}); }
+  else { const lm2=$('libMsg'); if(lm2) lm2.textContent+=' (Shared queue not connected yet — send Chappie the link in chat as a backup.)'; }
   if(msg) msg.textContent='Added as pending. Drum chart not built yet — send Chappie the link in chat.';
   const lm=$('libMsg'); if(lm) lm.textContent='Added: '+title+' — pending drum build. Send Chappie the YouTube link in chat, about 10 minutes, then it plays with the drum chart for everyone.';
   hideAllPanels(); show('libWindow'); renderLibrary();
@@ -1972,13 +1979,42 @@ async function loadBoards(level){
     setSharedRows('<p class="note">Shared boards: load failed — '+(e.code||e.message||'unknown')+'. Local boards above still work.</p>');
   }
 }
-window.CR3_SHARED={save:saveShared, loadBoards:loadBoards};
+async function submitSong(entry){
+  const qm=document.getElementById('libQueueMsg'); if(qm) qm.textContent='Submitting to shared queue…';
+  if(!db||!user){ if(qm) qm.textContent='Shared queue: not connected yet. Send Chappie the link in chat as a backup.'; return; }
+  try{
+    await addDoc(collection(db,'song_requests'),{videoId:entry.videoId,title:entry.title,artist:entry.artist||'',bpm:entry.bpm||120,submittedBy:document.getElementById('pname')?.value?.trim()||'ROCKSTAR',status:'pending',uid:user.uid,createdAt:serverTimestamp()});
+    if(qm) qm.textContent='Submitted to shared queue: '+entry.title+'. Chappie will build it, about 10 minutes, then it moves into the library for everyone.';
+    loadQueue();
+  }catch(e){
+    console.warn('[cr3] song request failed',e);
+    if(qm) qm.textContent='Shared queue: submit failed — '+(e.code||e.message||'unknown')+'. Send Chappie the link in chat as a backup.';
+  }
+}
+async function loadQueue(){
+  const list=document.getElementById('libQueueList'); if(!list) return;
+  if(!db){ list.innerHTML='<p class="note">Shared queue: not connected yet.</p>'; return; }
+  list.innerHTML='<p class="note">Shared queue: loading…</p>';
+  try{
+    const snap=await getDocs(query(collection(db,'song_requests'),orderBy('createdAt','desc'),limit(50)));
+    const rows=[]; snap.forEach(d=>{ const r=d.data(); rows.push(r); });
+    // createdAt serverTimestamp may be null for very new docs, keep them at top
+    list.innerHTML=rows.length?rows.map(r=>'<div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700">'+escHtml(r.title||r.videoId||'YouTube song')+'</div><div class="sub" style="margin:2px 0">'+escHtml(r.artist||'')+' · '+(r.status||'pending').toUpperCase()+' · submitted by '+escHtml(r.submittedBy||'player')+'</div></div>').join(''):'<p class="note">No songs requested yet — be the first to add one.</p>';
+  }catch(e){
+    console.warn('[cr3] queue load failed',e);
+    list.innerHTML='<p class="note">Shared queue: load failed — '+(e.code||e.message||'unknown')+'. If this is permission-denied, the queue rules are not published yet.</p>';
+  }
+}
+window.CR3_SHARED={save:saveShared, loadBoards:loadBoards, submitSong:submitSong, loadQueue:loadQueue};
+const _qr=document.getElementById('libQueueRefreshBtn'); if(_qr) _qr.addEventListener('click',loadQueue);
+const _lm=document.getElementById('libMenuBtn'); if(_lm) _lm.addEventListener('click',()=>{ setTimeout(loadQueue, 100); });
 try{
   const app=initializeApp(firebaseConfig);
   const auth=getAuth(app); db=getFirestore(app);
   user=(await signInAnonymously(auth)).user;
   sharedStatus='Shared boards: connected as anonymous tester.';
   if(window.CR3_PENDING_SHARED){ const pending=window.CR3_PENDING_SHARED; window.CR3_PENDING_SHARED=null; saveShared(pending); }
+  loadQueue();
 }catch(e){
   console.warn('[cr3] firebase init failed',e);
   sharedStatus='Shared boards: Firebase not connected — '+(e.code||e.message||'unknown');
